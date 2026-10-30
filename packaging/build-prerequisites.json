@@ -1,0 +1,35 @@
+{
+  "SchemaVersion": 1,
+  "Platform": "Windows x64",
+  "DotnetSdk": {
+    "Version": "8.0.427",
+    "Url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.427/dotnet-sdk-8.0.427-win-x64.zip",
+    "SHA256": "AB9D4E4275DB9683A6B51640122D184C5C6AE5DA680D0C0ED82E994662353CC8",
+    "OfficialSHA512": "a4dd6eb2bf2a2f6fb10997d3e044a229b23ad96a5c86d20494687e34ee73b537d7bd14488ce14cded6917f6778da4d66360e2734020b7ef487d0f29ab144489d",
+    "LocalArchive": "downloads/dotnet-sdk.zip",
+    "ExtractTo": "tools/dotnet"
+  },
+  "BepInEx": {
+    "Version": "6.0.0-be.791+b782da4",
+    "Url": "https://builds.bepinex.dev/projects/bepinex_be/791/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.791%2Bb782da4.zip",
+    "SHA256": "BB1C510909B69522733791F3A0817A487379A52DA6468A492F1C9C19B3EC6F9A",
+    "Bytes": 34336890,
+    "LocalArchive": "downloads/bepinex-791.zip",
+    "ExtractTo": "loader"
+  },
+  "NativeToolchain": {
+    "VisualStudio": "2022 Build Tools with C++ x64",
+    "PlatformToolset": "v143",
+    "ObservedCompiler": "14.44.35207",
+    "WindowsSdk": "10.0.26100",
+    "CMakeMinimum": "3.20",
+    "Other": ["CTest", "Git"]
+  },
+  "StreamlineHeaders": {
+    "ArchivePlan": "backend-plan.json / Dependencies[id=streamline_fg]",
+    "VerifiedDownloadedArchive": "downloads/streamline_fg.zip",
+    "ExtractTo": "vendor/Streamline",
+    "ExpectedHeader": "vendor/Streamline/include/sl_dlss_g.h"
+  },
+  "GameInterop": "Generate locally from the owned, matching Last Epoch build. No game or generated interop assemblies are redistributed."
+}

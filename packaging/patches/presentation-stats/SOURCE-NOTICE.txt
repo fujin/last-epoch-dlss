@@ -1,0 +1,12 @@
+Local modified OptiScaler backend: LastEpoch-late-hudless-ABI1-presentation-stats-V1
+
+Based on Skynizz/optiscaler-dlss5 v1.2.1, commit 6bfc4389c25054ef6747df6e6b1b470e9541c4da, licensed under GPL-3.0. This is an unofficial local modification, not an upstream release.
+
+Complete corresponding source is the containing vendor/optiscaler-local tree. The pinned original source archive is ../../downloads/optiscaler-source-1.2.1.zip, SHA256 1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507. Published source:
+https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-source.zip
+
+late-hudless.patch contains all local changes. Build with Build-Local.ps1 -BuildDirectoryName local-build-presentation using VS2022 C++ v143 and Windows SDK. Read ../docs/LATE-HUDLESS-D3D11.md and ../docs/PRESENTATION-STATS-V1.md for API contracts and validation requirements. variant-manifest.json identifies this binary and patch by SHA256.
+
+Original LICENSE and Licenses/ notices remain in the source tree. Keep those notices and provide the complete corresponding source, including modifications/build instructions, when distributing this modified GPL backend. Separate NVIDIA proprietary runtime files retain their own licenses and are not embedded in this DLL.
+
+Build passed; runtime validation of this variant is pending. No staged or installed game backend was replaced by its build. Unchanged upstream code emitted C4744 (atomic shared_ptr alignment) and LNK4098 (mixed CRT defaults) link warnings, which are recorded rather than suppressed.

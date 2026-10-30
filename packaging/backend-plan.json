@@ -1,0 +1,396 @@
+{
+  "SchemaVersion": 1,
+  "Status": "Native 1600x900 DLAA, NVIDIA 2x/3x/4x presentation throughput and actual DLSS 5 NR evaluation/composition verified offline. Native 5120x1440 world throughput observed, but menu opening was followed by GPU device hang; stability validation incomplete. Reduced-resolution SR unsupported; DLAA HUDless capture under repair.",
+  "Target": {
+    "Game": "Last Epoch",
+    "Unity": "6000.4.8f1 IL2CPP",
+    "GameRenderApi": "D3D11",
+    "FrameGenerationRenderApi": "D3D12 shared-resource interop",
+    "Gpu": "GeForce RTX 5080",
+    "PreferredDisplay": {
+      "Width": 5120,
+      "Height": 1440,
+      "Mode": "Borderless",
+      "Validation": "Provisional world rendering/throughput observed; startup clipping resolved after clean restart and foreground return worked. GPU device hung after menu opening; stability and final performance validation incomplete.",
+      "ObsoleteSetting": "3840x2160 exclusive is not the user target"
+    }
+  },
+  "Backend": {
+    "Repository": "https://github.com/Skynizz/optiscaler-dlss5",
+    "Version": "1.2.1",
+    "Commit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
+    "License": "GPL-3.0; NVIDIA components retain their separate licenses",
+    "ProxyFilename": "version.dll",
+    "ConfigurationFilename": "OptiScaler.ini",
+    "RuntimeDirectory": "OptiScaler/streamline",
+    "SourceArchiveUrl": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-source.zip",
+    "SourceArchiveSHA256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
+    "LocalVariant": {
+      "Name": "LastEpoch-late-hudless-ABI1-presentation-stats-V1",
+      "DllSHA256": "B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7",
+      "Manifest": "vendor/optiscaler-local/local-build-presentation/variant-manifest.json",
+      "SourceTree": "vendor/optiscaler-local",
+      "StagingScript": "scripts/Stage-LocalBackend.ps1",
+      "ProbeCandidate": "Separate optional Present-probe build is not selected by the staging helper"
+    }
+  },
+  "OptionalNeuralRendering": {
+    "EnabledByDefault": false,
+    "Status": "Official signed NVIDIA 310.9.16 model successfully evaluated/composed at 1600x900 with same-scene on/off check. Native 5120x1440 world run with NR WorkingScale=0.5 produced provisional throughput observations, then a menu/device-hang failure; native stability remains unvalidated.",
+    "ModelVersion": "310.9.16.0",
+    "ModelPurpose": "DLSS 5 Neural Rendering; separate from DLSS Super Resolution and Multi Frame Generation",
+    "TargetGpu": "GeForce RTX 5080 (RTX 50-series native runtime)",
+    "Archive": {
+      "Id": "rtx-remix-nr-1.6.1",
+      "Url": "https://github.com/NVIDIAGameWorks/rtx-remix/releases/download/remix-1.6.1/rtx-remix-for-x64-games-release-remix-1.6.1.zip",
+      "SHA256": "7DD1D44492A609050E44B0E3581CEC31135D1ED88B4A91123B4FAAE91955716A",
+      "Size": 557087446,
+      "DownloadFilename": "rtx-remix-nr-1.6.1.zip",
+      "Files": [
+        {
+          "Source": "nvngx_dlssnr.dll",
+          "Target": "OptiScaler/nvngx_dlssnr.dll",
+          "Size": 266424944,
+          "SHA256": "2BC19BC09A7B89DD44F73E2AC0108FCC586E2154BDD0830F242F4F040E28789F"
+        },
+        {
+          "Source": "LICENSE.txt",
+          "Target": "docs/licenses/RTX-Remix-LICENSE.txt",
+          "Size": 1147,
+          "SHA256": "374CF90C1E4F2B42451ECD6C0884E1253BD9AA980DCEC732B717E4D872220A25"
+        },
+        {
+          "Source": "ThirdPartyLicenses-dxvk.txt",
+          "Target": "docs/licenses/RTX-Remix-ThirdPartyLicenses-dxvk.txt",
+          "Size": 145918,
+          "SHA256": "E1585C4A265B0D78F33E0C6D1FCD6D3EA5C9C2CA7737568572110C316CD2C909"
+        }
+      ]
+    },
+    "Forwarder": {
+      "DependencyId": "optiscaler_fg",
+      "ArchiveFilename": "optiscaler_fg.zip",
+      "Source": "DLSS5-Optimised/nvngx.dll_dlssnr.dll",
+      "Target": "OptiScaler/nvngx.dll_dlssnr.dll",
+      "Size": 114176,
+      "SHA256": "87408102BC7B6A740C2F771DEB131A606424DF08165D4B9AB34C2742C2A42EA0"
+    },
+    "Authenticode": {
+      "RequiredStatus": "Valid",
+      "RequiredSubject": "CN=NVIDIA Corporation",
+      "ObservedStatus": "Valid",
+      "ObservedFileVersion": "310,9,16,0",
+      "ObservedSubject": "CN=NVIDIA Corporation, OU=1005bk6, O=NVIDIA Corporation, L=Santa Clara, S=California, C=US"
+    },
+    "Integration": {
+      "RequiredTextures": [
+        "scene color before UI",
+        "depth",
+        "motion vectors",
+        "output"
+      ],
+      "AdditionalMetadata": [
+        "correct motion-vector scale",
+        "depth inversion",
+        "resource sizes/subrects",
+        "history reset"
+      ],
+      "Route": "OptiScaler dlss_12: D3D11 inputs shared with D3D12, existing NR pass before FG and UI",
+      "FurtherTexturesRequiredByPinnedFork": false,
+      "Limitations": [
+        "This community integration has successful native 1600x900 evaluation/composition evidence; broad game compatibility and the 5120x1440 borderless target are not yet established.",
+        "The official model hash and Authenticode signature establish provenance; actual evaluation is separately evidenced in the saved success log.",
+        "Initial DlssNr.Enabled remains false. Fetch-NeuralRendering.ps1 stages files without enabling the feature.",
+        "The official Remix driver minimum is 616.92. Actual tested driver NGX loader was 32.0.16.2101.",
+        "The public official Remix implementation also uses a developer control-mask texture; the pinned OptiScaler integration does not expose that optional artistic control.",
+        "Approximately 3 ms NR pass cost was observed in the tested 1600x900 scene with diagnostic readbacks enabled; this is not a final benchmark or a native-ultrawide performance prediction."
+      ]
+    },
+    "Evidence": [
+      "https://github.com/NVIDIAGameWorks/rtx-remix/releases/tag/remix-1.6.1",
+      "https://github.com/NVIDIAGameWorks/rtx-remix/releases/download/remix-1.6.1/rtx-remix-for-x64-games-release-remix-1.6.1-crc.txt",
+      "https://github.com/NVIDIAGameWorks/dxvk-remix/blob/0ba9973fd856e29fe9cf8dd2f2bc754bcbb2037a/src/dxvk/rtx_render/rtx_ngx_wrapper.cpp",
+      "https://github.com/NVIDIAGameWorks/dxvk-remix/blob/0ba9973fd856e29fe9cf8dd2f2bc754bcbb2037a/packman-external.xml",
+      "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/dlssnr/forwarder/dlssnr_forwarder.cpp",
+      "https://research.nvidia.com/labs/adlr/DLSS5/",
+      "https://www.nvidia.com/en-us/geforce/news/dlss-5-faster-ai-model-hogwarts-legacy-rtx-spark-laptops/"
+    ]
+  },
+  "Dependencies": [
+    {
+      "Id": "optiscaler_fg",
+      "Version": "1.2.1",
+      "Url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-win-x64.zip",
+      "SHA256": "0D5B24887EA2C622754DA68EFC76EF55AE42B5D3BE350A8D43CAFBABB6747EC6",
+      "SHA256Provenance": "Big Beautiful Walk lockfile; independently matched GitHub release asset digest",
+      "Archive": "zip",
+      "Required": true,
+      "Files": [
+        {
+          "Source": "DLSS5-Optimised/OptiScaler.dll",
+          "Target": "version.dll"
+        }
+      ],
+      "LicenseUrl": "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/LICENSE"
+    },
+    {
+      "Id": "nvngx_dlss",
+      "Version": "310.9.1",
+      "Url": "https://raw.githubusercontent.com/NVIDIA/DLSS/374959484e79a640feaba44c93ac8cfb0a03f5b5/lib/Windows_x86_64/rel/nvngx_dlss.dll",
+      "SHA256": "3975567B8943C53ACCE397F2B72380092F84F162D00B0D2C7D08A1025C563983",
+      "SHA256Provenance": "Big Beautiful Walk lockfile; verify downloaded bytes",
+      "Archive": "file",
+      "Required": true,
+      "Files": [
+        {
+          "Source": "nvngx_dlss.dll",
+          "Target": "nvngx_dlss.dll"
+        }
+      ],
+      "LicenseUrl": "https://github.com/NVIDIA/DLSS/blob/374959484e79a640feaba44c93ac8cfb0a03f5b5/LICENSE.txt"
+    },
+    {
+      "Id": "streamline_fg",
+      "Version": "2.14.1",
+      "FrameGenerationRuntimeVersion": "310.9.1",
+      "Url": "https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.1/streamline-sdk-v2.14.1.zip",
+      "SHA256": "92C4D954631A1710DA86CA3FA8D5034F2B9503838C95FC4AE977AE149319781B",
+      "SHA256Provenance": "Big Beautiful Walk lockfile; verify downloaded bytes",
+      "Archive": "zip",
+      "Required": true,
+      "Files": [
+        {
+          "Source": "bin/x64/sl.interposer.dll",
+          "Target": "OptiScaler/streamline/sl.interposer.dll"
+        },
+        {
+          "Source": "bin/x64/sl.common.dll",
+          "Target": "OptiScaler/streamline/sl.common.dll"
+        },
+        {
+          "Source": "bin/x64/sl.dlss_g.dll",
+          "Target": "OptiScaler/streamline/sl.dlss_g.dll"
+        },
+        {
+          "Source": "bin/x64/sl.pcl.dll",
+          "Target": "OptiScaler/streamline/sl.pcl.dll"
+        },
+        {
+          "Source": "bin/x64/sl.reflex.dll",
+          "Target": "OptiScaler/streamline/sl.reflex.dll"
+        },
+        {
+          "Source": "bin/x64/nvngx_dlssg.dll",
+          "Target": "OptiScaler/streamline/nvngx_dlssg.dll"
+        },
+        {
+          "Source": "license.txt",
+          "Target": "OptiScaler/streamline/licenses/Streamline-LICENSE.txt"
+        },
+        {
+          "Source": "3rd-party-licenses.md",
+          "Target": "OptiScaler/streamline/licenses/THIRD-PARTY.md"
+        },
+        {
+          "Source": "bin/x64/nvngx_dlss.license.txt",
+          "Target": "OptiScaler/streamline/licenses/NVIDIA-NGX-LICENSE.txt"
+        },
+        {
+          "Source": "bin/x64/reflex.license.txt",
+          "Target": "OptiScaler/streamline/licenses/Reflex-LICENSE.txt"
+        }
+      ],
+      "LicenseUrl": "https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt"
+    }
+  ],
+  "InitialConfiguration": {
+    "Upscalers": {
+      "Dx11Upscaler": "dlss_12",
+      "Dx12Upscaler": "dlss"
+    },
+    "FrameGen": {
+      "Enabled": "false",
+      "FGInput": "Upscaler",
+      "FGOutput": "DLSSG",
+      "FGNvngxReplacement": "None"
+    },
+    "DLSSG": {
+      "InterpolationCount": "1",
+      "ForceDMFG": "false"
+    },
+    "fakenvapi": {
+      "ForceXeLL": "false"
+    },
+    "DlssNr": {
+      "Enabled": "false"
+    },
+    "Spoofing": {
+      "Dxgi": "false"
+    },
+    "Libraries": {
+      "OptiDllPath": "OptiScaler"
+    },
+    "Menu": {
+      "OverlayMenu": "true",
+      "ShortcutKey": "0x2D",
+      "FGShortcutKey": "-1"
+    },
+    "Log": {
+      "LogToFile": "true",
+      "LogLevel": "2"
+    }
+  },
+  "Multipliers": [
+    {
+      "DisplayMultiplier": 2,
+      "GeneratedFramesPerRenderedFrame": 1,
+      "Section": "DLSSG",
+      "Key": "InterpolationCount",
+      "Value": "1"
+    },
+    {
+      "DisplayMultiplier": 3,
+      "GeneratedFramesPerRenderedFrame": 2,
+      "Section": "DLSSG",
+      "Key": "InterpolationCount",
+      "Value": "2"
+    },
+    {
+      "DisplayMultiplier": 4,
+      "GeneratedFramesPerRenderedFrame": 3,
+      "Section": "DLSSG",
+      "Key": "InterpolationCount",
+      "Value": "3"
+    }
+  ],
+  "ValidationRequired": [
+    "Repair and retest the native 5120x1440 borderless menu/device hang; no completed native stability or final performance claim.",
+    "Repeat menu, Alt-Tab, camera motion, combat effects, UI, transitions and sustained-play checks; scan the complete Unity and backend logs using Test-RenderLog.ps1 -PlayerLogPath <Unity-log> -BackendLogPath <OptiScaler-log> -RequireClean.",
+    "Measure controlled performance separately; the 1600x900 diagnostic run used GPU readbacks, and the native run ended in device loss. DXGI call/sequence deltas are not physical panel scanouts.",
+    "Keep reduced-resolution Quality/Balanced/Performance disabled in the normal build until postprocessing temporary-size mismatches and white presentation are resolved and visually retested.",
+    "Repair and verify true final-camera HUDless capture in DLAA; require accepted image submissions rather than captured frame tokens, then inspect UI quality.",
+    "Online play remains unverified; verified sessions used the offline DLSSProbe character."
+  ],
+  "ExcludedFromFgOnlyRuntime": [
+    "nvngx.dll_dlssnr.dll",
+    "nvngx_dlssnr.dll",
+    "libxess.dll",
+    "libxess_fg.dll",
+    "libxell.dll",
+    "AMD FSR frame-generation DLLs"
+  ],
+  "Evidence": [
+    "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/Config.cpp#L197",
+    "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/framegen/dlssg/DLSSG_Dx12.cpp#L254",
+    "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/inputs/FG/Upscaler_Inputs_Dx11wDx12.cpp",
+    "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/with_dx12/dx11_with_dx12_sc.cpp#L358",
+    "https://github.com/Skynizz/optiscaler-dlss5/blob/6bfc4389c25054ef6747df6e6b1b470e9541c4da/OptiScaler/proxies/Streamline_Proxy.h#L331",
+    "https://github.com/Pseudogiant-xr/Big-Beautiful-Walk/blob/main/packaging/dependencies.lock.json",
+    "https://github.com/Pseudogiant-xr/Big-Beautiful-Walk/blob/main/docs/FRAME-GENERATION.md"
+  ],
+  "RuntimeValidation": {
+    "UpdatedLocalDate": "2026-10-31",
+    "TimeZone": "Pacific/Auckland",
+    "SessionMode": "Offline",
+    "Character": "DLSSProbe",
+    "TestResolution": [
+      1600,
+      900
+    ],
+    "DLAA": "Visible native-resolution reconstruction verified",
+    "FrameGeneration": [
+      {
+        "RequestedMultiplier": 2,
+        "ClientPresentDelta": 300,
+        "DXGIPresentCallsDelta": 600,
+        "EvidenceLine": 1246
+      },
+      {
+        "RequestedMultiplier": 3,
+        "ClientPresentDelta": 300,
+        "DXGIPresentCallsDelta": 900,
+        "EvidenceLine": 11535
+      },
+      {
+        "RequestedMultiplier": 4,
+        "ClientPresentDelta": 300,
+        "DXGIPresentCallsDelta": 1200,
+        "EvidenceLine": 13163
+      }
+    ],
+    "PresentationEvidence": "diagnostics/dlaa-fg234-nr-success-1600/LogOutput.log",
+    "PresentationLimit": "Independent underlying DXGI call throughput; not physical panel scanouts. Diagnostic readbacks were on, so no final benchmark is claimed.",
+    "NeuralRendering": {
+      "ActualEvaluationAndComposition": true,
+      "Evidence": "diagnostics/dlaa-fg234-nr-success-1600/OptiScaler.log",
+      "EvidenceLine": 8064,
+      "CompositionTime": "10:37:06.224453",
+      "SameSceneOnOffVisualCheck": true,
+      "ObservedPassCostMillisecondsApproximately": 3,
+      "Benchmark": false
+    },
+    "LateHudless": "NOT verified in DLAA: saved successful run has accepted=0 and rejected=0 throughout, including a sample with capturedFrameTokens=89019. Captured tokens are not accepted HUDless images. Final full-resolution TempBuffer75 was ineligible; final-camera capture is under repair. No verified HUD separation is claimed.",
+    "RenderLog": {
+      "Path": "diagnostics/Player-D3D11-20261030-212935-665.log",
+      "WholeFileChecked": true,
+      "RenderTargetErrors": 0,
+      "ColorDepthMismatches": 0,
+      "Checker": "scripts/Test-RenderLog.ps1",
+      "BackendPath": "diagnostics/dlaa-fg234-nr-success-1600/OptiScaler.log",
+      "BackendDeviceErrors": 0
+    },
+    "NormalManagedBuild": {
+      "SHA256": "6BEFF32D726B088F886221AF86CFF4C94F4895A33E697DC1AFCDADB20BDB2579",
+      "Path": "build/managed-native-history/LastEpochGraphics.dll",
+      "Mode": "Native-resolution DLAA only",
+      "ScaledModes": "Quality/Balanced/Performance rejected; experimental builds remain isolated",
+      "DiagnosticPanelStartsHidden": true
+    },
+    "Controls": {
+      "BackendMenu": "Insert",
+      "DiagnosticPanel": "F10",
+      "F8F9": "Game keys, not mod controls"
+    },
+    "CompatibilityAudit": "diagnostics/dll-compatibility-audit.txt",
+    "LoadedModuleInventory": "diagnostics/loaded-dll-audit.json (historical PID 27580 snapshot; newer validation has separate logs)",
+    "PreferredDisplayStatus": "5120x1440 borderless world rendering observed; Ultra/DLAA4/NR WorkingScale=0.5 uncapped approximately 49.2 rendered fps and 197 DXGI calls/s at 98% GPU use. Native run failed stability after OptiScaler menu opening. Fixes in preparation, neither deployed.",
+    "OnlineStatus": "Unverified",
+    "NativeDisplayRun": {
+      "Resolution": [
+        5120,
+        1440
+      ],
+      "Mode": "Borderless",
+      "Quality": "Ultra",
+      "Upscaling": "DLAA",
+      "RequestedMultiplier": 4,
+      "NRWorkingScale": 0.5,
+      "FrameCap": "Uncapped",
+      "ObservedRenderedFpsApproximately": 49.2,
+      "ObservedDXGIPresentCallsPerSecondApproximately": 197,
+      "ObservedGpuUtilizationPercent": 98,
+      "PerformanceClaim": "Provisional scene observation, not physical panel scanouts or a final benchmark",
+      "Startup": "Clean restart resolved clipped UI",
+      "ForegroundReturn": "Worked",
+      "EvidenceDirectory": "diagnostics/native-5120-menu-device-hung",
+      "PlayerLog": "diagnostics/Player-D3D11-20261030-220301-568.log",
+      "MenuOpenedLocalTime": "11:09:06.684438",
+      "FirstDeviceHungLocalTime": "11:09:15.840852",
+      "FirstBackendDeviceErrorLine": 5089,
+      "RenderTargetErrors": 0,
+      "ColorDepthMismatches": 0,
+      "PlayerDeviceErrors": 0,
+      "BackendDeviceErrors": 753,
+      "Passed": false,
+      "TestProcessId": 35412,
+      "Shutdown": "Normal close timed out; only the hung test process was forcibly closed",
+      "PendingFixes": [
+        "Overlay fence/resource lifetime backend fix",
+        "Correct DLAA final-camera HUDless capture"
+      ],
+      "PendingFixesDeployed": false,
+      "StabilityValidated": false,
+      "FinalBenchmark": false
+    }
+  }
+}

@@ -1,0 +1,77 @@
+SOURCE-ONLY REPOSITORY
+======================
+
+This repository contains the original mod sources, build/deployment scripts,
+validation summaries and curated GPL backend patches. It excludes game binaries,
+generated interop, user saves, raw diagnostics, credentials, runtime DLLs/models,
+download archives, tools, build outputs, staging and the expanded vendor trees.
+
+Read README.txt before running anything. The tested 1600x900 DLAA/FG/NR behavior
+does not establish native-ultrawide stability: the 5120x1440 test suffered a GPU
+device hang after opening the backend menu. Reduced-resolution SR is unsupported.
+The current native/managed source also includes a newly built final-camera
+HUDless candidate; successful capture still requires runtime proof. Compilation
+and WARP tests do not establish visual correctness.
+
+LOCAL PREREQUISITES FOR A FRESH CLONE
+
+1. Windows x64, an owned Last Epoch installation matching the documented Unity
+   build, NVIDIA RTX 5080 for the tested feature set, and suitable NVIDIA drivers.
+   Game paths default to G:\SteamLibrary\steamapps\common\Last Epoch; pass the
+   supported -GameDirectory override for a different installation.
+
+2. Install Visual Studio 2022 Build Tools with the C++ x64 toolchain and Windows
+   SDK, plus CMake/CTest and Git. The reviewed local build used MSVC v143 and
+   Windows SDK 10.0.26100. No toolchain binaries are redistributed here.
+
+3. Download the exact .NET SDK and BepInEx archives described in
+   packaging\build-prerequisites.json. Verify their SHA256 hashes with
+   Get-FileHash before extraction. Extract .NET into tools\dotnet so that
+   tools\dotnet\dotnet.exe exists. Extract BepInEx into loader so that
+   loader\BepInEx\core exists. Preserve their supplied licenses.
+
+4. Run scripts\Fetch-Backend.ps1 to fetch/verify pinned graphics dependencies.
+   The official Streamline ZIP remains in downloads\streamline_fg.zip. After
+   verifying its plan hash, extract that ZIP into vendor\Streamline; the bridge
+   expects vendor\Streamline\include\sl_dlss_g.h. Keep the vendor license files.
+
+5. Follow README.txt's loader/interop setup. Generated BepInEx interop must come
+   from the local owned game; it is deliberately absent from Git. Repair-Interop
+   operates only on generated metadata and preserves its original backup.
+   Then scripts\Build.ps1 -Restore builds and tests the mod. Do not define the
+   experimental rendering/scaling symbols for the normal DLAA build.
+
+6. Reconstruct any custom backend from packaging\patches\README.txt. The default
+   Fetch-Backend payload is the published upstream DLL; late HUDless and the
+   independent presentation-statistics API require the reviewed local variant.
+   A new compilation may have a different DLL hash. Review its result and update
+   explicit local approval pins only after validation; do not bypass hash checks.
+
+No setup command in this document was automatically executed on a fresh machine.
+This is a prototype source checkout, not a ready-to-run release or installer.
+
+SOURCE ARTIFACTS AND AUDIT SCOPE
+
+packaging\backend-plan.json identifies dependency bytes and the chronological
+runtime evidence. docs\dll-compatibility-audit.txt is a curated summary; referenced
+diagnostics paths belong to the developer's ignored local workspace. Raw logs and
+screenshots are not published because they can include account/session details.
+
+packaging\patches contains only patch text, exact source notices/licenses,
+manifests and build recipes. Its original notices may retain paths relative to
+their original vendor build directory; use the reconstruction recipe here to
+resolve repository paths. A manifest's DLL hash identifies the tested artifact;
+it does not imply that a binary is included in Git or that an untested candidate
+has been deployed. Generated build-date headers also prevent a blanket claim of
+bit-identical rebuilt DLLs across machines or build times.
+
+The deployment journal, original installation backups and interop backups are
+local-only and must be retained for restoration. This Git repository does not
+replace those backups. Follow README.txt's Restore.ps1 procedure while stopped.
+
+LICENSING
+
+Read NOTICE and the applicable subtree notices. The native bridge retains its
+Apache-2.0 license. OptiScaler source patches retain GPL-3.0 and their exact base
+source provenance. NVIDIA model/runtime and Streamline licenses are separate;
+their binaries are fetched from the identified sources and are not in Git.

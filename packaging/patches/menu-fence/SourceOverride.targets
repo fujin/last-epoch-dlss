@@ -1,0 +1,11 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- The working tree also contains an unselected Present-probe experiment.
+       Compile the unchanged pinned translation unit for this B913-based build. -->
+  <ItemGroup>
+    <ClCompile Remove="with_dx12\dx11_with_dx12_sc.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)source\dx11_with_dx12_sc.cpp">
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\with_dx12;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)dx11_with_dx12_sc.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+</Project>

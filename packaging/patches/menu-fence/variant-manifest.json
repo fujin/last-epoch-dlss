@@ -1,0 +1,122 @@
+{
+  "BaseRepository": "https://github.com/Skynizz/optiscaler-dlss5",
+  "BaseCommit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
+  "BaseSourceArchiveSha256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
+  "Variant": "LastEpoch-late-hudless-ABI1-presentation-stats-V1-menu-fence",
+  "BaselineDllSha256": "B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7",
+  "ApiVersion": 1,
+  "PresentationStatsApiVersion": 1,
+  "PresentationStatsBytes": 96,
+  "Dll": "OptiScaler.dll",
+  "DllSha256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+  "DllBytes": 26470400,
+  "Patch": "late-hudless.patch",
+  "PatchSha256": "53E3ED17C77CB12BF7710BEE540A8EF40F47DBA99EAEBD33325D29C78A196958",
+  "ReviewDelta": "menu-fence-only.patch",
+  "ReviewDeltaSha256": "445E3CDF2FF7EE7A2901A930460BC213BD4E344E0EB57C1621AB3E3746208A95",
+  "ChangedFiles": [
+    "OptiScaler/hudfix/Hudfix_Dx11.cpp",
+    "OptiScaler/hudfix/Hudfix_Dx11.h",
+    "OptiScaler/hudfix/ExternalHudless_Dx11.h",
+    "OptiScaler/Source.def",
+    "OptiScaler/OptiScaler.vcxproj",
+    "OptiScaler/framegen/IFGFeature.cpp",
+    "Build-Local.ps1",
+    "docs/LATE-HUDLESS-D3D11.md",
+    "OptiScaler/framegen/PresentationStats.h",
+    "OptiScaler/framegen/PresentationStats.cpp",
+    "OptiScaler/hooks/FG_Hooks.cpp",
+    "docs/PRESENTATION-STATS-V1.md",
+    "OptiScaler/menu/menu_overlay_dx.cpp",
+    "OptiScaler/include/imgui/imgui_impl_dx12.cpp"
+  ],
+  "SourceFiles": [
+    {
+      "Path": "OptiScaler/hudfix/Hudfix_Dx11.cpp",
+      "Sha256": "9C1F49E17AAE7BB5C736EC882FFF268C4576C45BE6CF878E1DB0BBD7DA9C586D"
+    },
+    {
+      "Path": "OptiScaler/hudfix/Hudfix_Dx11.h",
+      "Sha256": "C324826088DE81B51E984CAE2E6A94617F2B82B752B9FA6FDA37481BA1F63DCD"
+    },
+    {
+      "Path": "OptiScaler/hudfix/ExternalHudless_Dx11.h",
+      "Sha256": "F46CEE39A9051165D3B6DDEC76F2874F0E69A267911D9E2B60ECEC46E5126F76"
+    },
+    {
+      "Path": "OptiScaler/Source.def",
+      "Sha256": "D6E57484EA67405F3C9BF321A34F3F15B1D20944F1A674C2EEDBF62DC7A9AA38"
+    },
+    {
+      "Path": "OptiScaler/OptiScaler.vcxproj",
+      "Sha256": "DB02C4C6FFD3D8F60BA7BAC33FE4C11C827C0A2884065C1656B15270D870F4AD"
+    },
+    {
+      "Path": "OptiScaler/framegen/IFGFeature.cpp",
+      "Sha256": "C6C36BAE38A94E18ED1065BEB34776AA6E23FC3DD492860E0644002433CA7A2E"
+    },
+    {
+      "Path": "Build-Local.ps1",
+      "Sha256": "3D65D999D3E173CC7D459151C6C267713722B8944C893A9B778B9FB60B387A26"
+    },
+    {
+      "Path": "docs/LATE-HUDLESS-D3D11.md",
+      "Sha256": "A2261DFBC611BACB15451A4B4FF2F14A10B1971ADF85BDB65ADADE31E8A681A2"
+    },
+    {
+      "Path": "OptiScaler/framegen/PresentationStats.h",
+      "Sha256": "7872AE36AF978C604390061F39B9DD30A89FBA68BA863314555FEA35BA09139E"
+    },
+    {
+      "Path": "OptiScaler/framegen/PresentationStats.cpp",
+      "Sha256": "71AB62BCA0E9B682B968E8F9672C546596474F05481D79C5A9170B1656FD0981"
+    },
+    {
+      "Path": "OptiScaler/hooks/FG_Hooks.cpp",
+      "Sha256": "2C932F2B42D833D01D86E64A922D8D5B2AE9AF39867C87B5A00311F4AC2D30D8"
+    },
+    {
+      "Path": "docs/PRESENTATION-STATS-V1.md",
+      "Sha256": "ECA2FBA3C338107B72B3F265FE2FE380A95A0E325DA6DE3983E965E3386F34EF"
+    },
+    {
+      "Path": "OptiScaler/menu/menu_overlay_dx.cpp",
+      "Sha256": "B2574BEB3E41A86A4909B1A8341AC80DA7400B6E07D41D5DB9D8BC33949E981B"
+    },
+    {
+      "Path": "OptiScaler/include/imgui/imgui_impl_dx12.cpp",
+      "Sha256": "B39F8439528ECE911AE2691610A2E08E24031080F28EA34C76EB6FC71A13EA23"
+    }
+  ],
+  "CandidateChanges": [
+    "OptiScaler/menu/menu_overlay_dx.cpp",
+    "OptiScaler/include/imgui/imgui_impl_dx12.cpp"
+  ],
+  "BuildSourceOverride": {
+    "Source": "Exact unchanged file from pinned source archive",
+    "Sha256": "E225BF053DDCFF1B0B6415899E40AC5D4525BAF528FAB8D23052140404C1298A",
+    "Path": "OptiScaler/with_dx12/dx11_with_dx12_sc.cpp",
+    "Reason": "Working source contains an unselected Present-probe experiment; exclude it from this B913-based candidate"
+  },
+  "Validation": [
+    "VS2022 v143 Release x64 compile and link passed: 0 errors, 2 pre-existing warnings",
+    "dumpbin verified all four custom extension exports without loading DLL",
+    "Full source patch applied to exact pinned archive and reconstructed all14 changed files byte-for-byte with core.autocrlf=false",
+    "Focused two-file patch apply check passed",
+    "Independent agent review found no blocker in fence/COM lifetime, finite waits, failed-Signal retention, or pending-upload shutdown quarantine",
+    "Selected stage and installed version.dll remain B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7"
+  ],
+  "UnresolvedBuildWarnings": [
+    "C4744: unchanged upstream atomic<shared_ptr> alignment differs across translation units",
+    "LNK4098: upstream prebuilt static libraries conflict with dynamic CRT default"
+  ],
+  "RuntimeValidated": false,
+  "Deployed": false,
+  "Limitations": [
+    "Original GPU hang cause is plausible but unproven; controlled runtime validation required",
+    "Waiting for previous overlay submission may reduce overlap while overlay is drawing",
+    "Ordinary cleanup timeout retains resources; resize may fail safely instead of freeing in-flight resources",
+    "Unfinished upload COM objects may be retained until completion/device removal/process exit",
+    "Optional upstream secondary ImGui viewport waits are unchanged; this overlay does not enable secondary viewports"
+  ]
+}

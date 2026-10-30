@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>LastEpoch.InteropRepair</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\loader-diagnostics\CoreModuleRepair.cs" Link="CoreModuleRepair.cs" />
+    <Reference Include="$(MSBuildThisFileDirectory)..\..\loader\BepInEx\core\Mono.Cecil.dll"><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

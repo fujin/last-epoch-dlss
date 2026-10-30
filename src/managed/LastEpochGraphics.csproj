@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>LastEpochGraphics</AssemblyName>
+    <Version>0.1.0</Version>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <GameDir Condition="'$(GameDir)' == ''">G:\SteamLibrary\steamapps\common\Last Epoch</GameDir>
+  </PropertyGroup>
+  <Target Name="RequireInterop" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(GameDir)/BepInEx/interop/Unity.Postprocessing.Runtime.dll')" Text="Launch this Last Epoch build with BepInEx first to generate its local interop assemblies." />
+  </Target>
+  <ItemGroup>
+    <Reference Include="$(GameDir)/BepInEx/core/*.dll"><Private>false</Private></Reference>
+    <Reference Include="$(GameDir)/BepInEx/interop/*.dll"><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

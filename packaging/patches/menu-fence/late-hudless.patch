@@ -1,0 +1,1580 @@
+diff --git a/Build-Local.ps1 b/Build-Local.ps1
+new file mode 100644
+index 0000000..b40f25b
+--- /dev/null
++++ b/Build-Local.ps1
+@@ -0,0 +1,31 @@
++[CmdletBinding()]
++param(
++    [ValidateRange(1,16)][int]$ParallelProcesses = 4,
++    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9_-]*$')][string]$BuildDirectoryName = 'local-build'
++)
++$ErrorActionPreference = 'Stop'
++$forkRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') + '\'
++$vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
++$msbuild = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
++if (-not $msbuild) { throw 'Visual Studio C++ Build Tools were not found.' }
++$buildDirectory = Join-Path $forkRoot $BuildDirectoryName
++[IO.Directory]::CreateDirectory($buildDirectory) | Out-Null
++[IO.File]::WriteAllText((Join-Path $forkRoot 'OptiScaler\resource_build_date.h'),
++    ('#define VER_BUILD_DATE "' + [DateTime]::UtcNow.ToString('yyyyMMdd_HHmmss') + '"' + [Environment]::NewLine),
++    [Text.Encoding]::ASCII)
++[IO.File]::WriteAllText((Join-Path $forkRoot 'OptiScaler\resource_build_commit.h'),
++    ('#define VER_BUILD_COMMIT "6bfc4389-local-late-hudless"' + [Environment]::NewLine), [Text.Encoding]::ASCII)
++# Upstream release events package/move files with batch wildcards. This local
++# variant only compiles and links; packaging and deployment are separate.
++$buildArguments = @(
++    (Join-Path $forkRoot 'OptiScaler\OptiScaler.vcxproj'),
++    '/t:Build', '/p:Configuration=Release', '/p:Platform=x64', '/p:PlatformToolset=v143',
++    '/p:PreferredToolArchitecture=x64', "/p:LEBuildProcesses=$ParallelProcesses",
++    "/p:SolutionDir=$forkRoot", "/p:OutDir=$buildDirectory\", "/p:IntDir=$buildDirectory\obj\",
++    '/p:PreBuildEventUseInBuild=false', '/p:PostBuildEventUseInBuild=false',
++    "/m:$ParallelProcesses", '/v:minimal', '/nologo',
++    "/flp:logfile=$buildDirectory\build.log;verbosity=normal"
++)
++& $msbuild @buildArguments
++if ($LASTEXITCODE -ne 0) { throw "OptiScaler local build failed ($LASTEXITCODE). See $buildDirectory\build.log." }
++Write-Host "Local backend built in $buildDirectory. No staged or game backend was replaced."
+diff --git a/OptiScaler/OptiScaler.vcxproj b/OptiScaler/OptiScaler.vcxproj
+index a9eae2b..a1e0490 100644
+--- a/OptiScaler/OptiScaler.vcxproj
++++ b/OptiScaler/OptiScaler.vcxproj
+@@ -220,6 +220,9 @@
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+     <ClCompile>
++      <!-- Local reproducible build: embedded symbols avoid a shared PDB server. -->
++      <DebugInformationFormat>OldStyle</DebugInformationFormat>
++      <ProcessorNumber Condition="'$(LEBuildProcesses)' != ''">$(LEBuildProcesses)</ProcessorNumber>
+       <WarningLevel>Level3</WarningLevel>
+       <SDLCheck>true</SDLCheck>
+       <PreprocessorDefinitions>NDEBUG;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+@@ -630,6 +633,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
+     <ClCompile Include="framegen\dlssg\DLSSG_Dx12.cpp" />
+     <ClCompile Include="framegen\ffx\FSRFG_Dx12.cpp" />
+     <ClCompile Include="framegen\IFGFeature.cpp" />
++    <ClCompile Include="framegen\PresentationStats.cpp" />
+     <ClCompile Include="framegen\IFGFeature_Dx12.cpp" />
+     <ClCompile Include="framegen\nvngx\Nvngx_FG.cpp" />
+     <ClCompile Include="fsr4\FSR4ModelSelection.cpp" />
+@@ -896,4 +900,4 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+   <ImportGroup Label="ExtensionTargets">
+   </ImportGroup>
+-</Project>
+\ No newline at end of file
++</Project>
+diff --git a/OptiScaler/Source.def b/OptiScaler/Source.def
+index 33a7053..733759f 100644
+--- a/OptiScaler/Source.def
++++ b/OptiScaler/Source.def
+@@ -1,4 +1,8 @@
+ EXPORTS
++OptiScaler_GetHudlessD3D11Version
++OptiScaler_GetHudlessFrameTokenD3D11
++OptiScaler_SubmitHudlessD3D11
++OptiScaler_GetPresentationStatsV1
+ GetBehaviorValue = _GetBehaviorValue @100 PRIVATE
+ D3D12CreateDevice = _D3D12CreateDeviceExport @101 PRIVATE
+ D3D12GetDebugInterface = _D3D12GetDebugInterfaceExport @102 PRIVATE
+diff --git a/OptiScaler/framegen/IFGFeature.cpp b/OptiScaler/framegen/IFGFeature.cpp
+index d2303f7..3d4b183 100644
+--- a/OptiScaler/framegen/IFGFeature.cpp
++++ b/OptiScaler/framegen/IFGFeature.cpp
+@@ -39,8 +39,11 @@ UINT64 IFGFeature::StartNewFrame()
+ 
+     if (_lastDispatchedFrame == 0 || (_frameCount - _lastDispatchedFrame) > 2)
+     {
+-        LOG_WARN("Frame count jumped too much! _frameCount: {}, _lastDispatchedFrame: {}", _frameCount,
+-                 _lastDispatchedFrame);
++        // SR still advances this ring while FG is disabled; no dispatch is then
++        // expected. Keep the resynchronization but warn only during active FG.
++        if (Config::Instance()->FGEnabled.value_or_default() && IsActive() && !IsPaused())
++            LOG_WARN("Frame count jumped too much! _frameCount: {}, _lastDispatchedFrame: {}", _frameCount,
++                     _lastDispatchedFrame);
+ 
+         _lastDispatchedFrame = _frameCount - 1;
+     }
+diff --git a/OptiScaler/framegen/PresentationStats.cpp b/OptiScaler/framegen/PresentationStats.cpp
+new file mode 100644
+index 0000000..4f46e52
+--- /dev/null
++++ b/OptiScaler/framegen/PresentationStats.cpp
+@@ -0,0 +1,208 @@
++#include "pch.h"
++#include "PresentationStats.h"
++#include <Config.h>
++#include <State.h>
++#include <framegen/IFGFeature_Dx12.h>
++#include <wrl/client.h>
++#include <atomic>
++#include <mutex>
++
++namespace
++{
++using Microsoft::WRL::ComPtr;
++// NVIDIA's documented QueryInterface alternative to slGetNativeInterface.
++constexpr GUID StreamlineNativeInterface =
++    { 0xadec44e2, 0x61f0, 0x45c3, { 0xad, 0x9f, 0x1b, 0x37, 0x37, 0x92, 0x84, 0xff } };
++std::atomic<std::uint64_t> clientPresents { 0 }, lifecycleGeneration { 1 };
++std::mutex snapshotMutex;
++std::uint64_t epoch = 0, observedGeneration = 0, nativeTotal = 0, displayTotal = 0;
++std::uintptr_t identity = 0;
++HWND outputWindow = nullptr;
++UINT width = 0, height = 0, mode = 0;
++DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
++UINT lastNative = 0, lastDisplay = 0;
++bool nativeBaseline = false, displayBaseline = false;
++
++void BeginEpoch()
++{
++    if (++epoch == 0)
++        ++epoch;
++    nativeBaseline = displayBaseline = false;
++}
++
++bool CounterDiscontinuous(UINT current, UINT previous)
++{
++    // Ordinary uint32 rollover is allowed. A backward reset or implausibly
++    // distant discontinuity starts a new epoch rather than inventing frames.
++    return static_cast<UINT>(current - previous) > 0x7fffffffU;
++}
++
++int ReadSnapshot(OptiScalerPresentationStatsV1& result)
++{
++    auto& state = State::Instance();
++    auto& config = *Config::Instance();
++    auto* fg = state.currentFG;
++    if (state.isShuttingDown || fg == nullptr || state.currentFGSwapchain == nullptr ||
++        state.activeFgOutput != FGOutput::DLSSG ||
++        state.swapchainInteropApi != SwapchainInteropApi::Dx11wDx12 ||
++        !config.FGUseMutexForSwapchain.value_or_default())
++        return 0;
++
++    // Same lock order as Present/resize and late-HUDless publication. All COM
++    // references remain local so telemetry cannot pin swapchains across resize.
++    OwnedLockGuard frameLock(fg->Mutex, 6);
++    if (state.isShuttingDown || state.currentFG != fg || state.currentFGSwapchain == nullptr)
++        return 0;
++
++    ComPtr<IUnknown> native(state.currentFGSwapchain);
++    bool unwrapped = false, nativeVerified = false;
++    for (int depth = 0; depth != 4; ++depth)
++    {
++        ComPtr<IUnknown> underlying;
++        const auto unwrapResult = native->QueryInterface(StreamlineNativeInterface,
++                                                        reinterpret_cast<void**>(underlying.GetAddressOf()));
++        if (unwrapResult == E_NOINTERFACE)
++        {
++            nativeVerified = true;
++            break;
++        }
++        if (FAILED(unwrapResult) || !underlying)
++            return 0;
++        ComPtr<IUnknown> previousIdentity, nextIdentity;
++        native.As(&previousIdentity);
++        underlying.As(&nextIdentity);
++        if (previousIdentity.Get() == nextIdentity.Get())
++            return 0;
++        native = std::move(underlying);
++        unwrapped = true;
++    }
++    if (!unwrapped || !nativeVerified)
++        return 0; // Refuse an unverified outer proxy's possibly synthetic counters.
++
++    ComPtr<IDXGISwapChain> visible;
++    ComPtr<ID3D12Device> device;
++    ComPtr<IUnknown> canonical;
++    DXGI_SWAP_CHAIN_DESC desc {};
++    DWORD processId = 0;
++    if (FAILED(native.As(&visible)) || FAILED(visible->GetDesc(&desc)) ||
++        FAILED(visible->GetDevice(IID_PPV_ARGS(device.GetAddressOf()))) ||
++        FAILED(visible.As(&canonical)) || desc.OutputWindow == nullptr ||
++        desc.OutputWindow != state.currentSwapchainDesc.OutputWindow || !IsWindowVisible(desc.OutputWindow))
++        return 0;
++    GetWindowThreadProcessId(desc.OutputWindow, &processId);
++    if (processId != GetCurrentProcessId())
++        return 0;
++
++    // currentRealSwapchain is the hidden D3D11 bridge chain and is intentionally
++    // never queried. This chain must be the visible D3D12 presentation target.
++    result.flags = PresentationVisibleChain | PresentationDlssg | PresentationDx11Interop;
++    const bool active = config.FGEnabled.value_or_default() && fg->IsActive() && !fg->IsPaused() && !state.fgChanged;
++    if (active)
++        result.flags |= PresentationFgActive;
++    result.requestedMultiplier = active ? fg->GetInterpolatedFrameCount() + 1 : 1;
++    const UINT currentMode = (active ? 1U : 0U) | (state.fgChanged ? 2U : 0U) |
++                             (result.requestedMultiplier << 8);
++
++    UINT presentCount = 0;
++    DXGI_FRAME_STATISTICS statistics {};
++    const auto nativeResult = visible->GetLastPresentCount(&presentCount);
++    const auto displayResult = visible->GetFrameStatistics(&statistics);
++    result.nativeQueryHResult = nativeResult;
++    result.displayQueryHResult = displayResult;
++
++    std::lock_guard<std::mutex> lock(snapshotMutex);
++    const auto generation = lifecycleGeneration.load();
++    const auto currentIdentity = reinterpret_cast<std::uintptr_t>(canonical.Get());
++    bool newBaseline = false;
++    if (identity != currentIdentity || outputWindow != desc.OutputWindow || width != desc.BufferDesc.Width ||
++        height != desc.BufferDesc.Height || format != desc.BufferDesc.Format || mode != currentMode ||
++        observedGeneration != generation)
++    {
++        identity = currentIdentity;
++        outputWindow = desc.OutputWindow;
++        width = desc.BufferDesc.Width;
++        height = desc.BufferDesc.Height;
++        format = desc.BufferDesc.Format;
++        mode = currentMode;
++        observedGeneration = generation;
++        BeginEpoch();
++        newBaseline = true;
++    }
++    if ((SUCCEEDED(nativeResult) && nativeBaseline && CounterDiscontinuous(presentCount, lastNative)) ||
++        (SUCCEEDED(displayResult) && displayBaseline && CounterDiscontinuous(statistics.PresentCount, lastDisplay)) ||
++        (displayResult == DXGI_ERROR_FRAME_STATISTICS_DISJOINT && displayBaseline))
++    {
++        BeginEpoch();
++        newBaseline = true;
++    }
++    if (SUCCEEDED(nativeResult))
++    {
++        result.flags |= PresentationNativeCounter;
++        if (nativeBaseline)
++            nativeTotal += static_cast<UINT>(presentCount - lastNative);
++        else
++            newBaseline = true;
++        nativeBaseline = true;
++        lastNative = presentCount;
++        result.nativeRaw = presentCount;
++    }
++    if (SUCCEEDED(displayResult))
++    {
++        result.flags |= PresentationDisplayStatistics;
++        if (displayBaseline)
++            displayTotal += static_cast<UINT>(statistics.PresentCount - lastDisplay);
++        else
++            newBaseline = true;
++        displayBaseline = true;
++        lastDisplay = statistics.PresentCount;
++        result.displayRaw = statistics.PresentCount;
++        result.presentRefresh = statistics.PresentRefreshCount;
++        result.syncRefresh = statistics.SyncRefreshCount;
++        result.lastDisplayQpc = statistics.SyncQPCTime.QuadPart;
++    }
++    if (newBaseline)
++        result.flags |= PresentationNewBaseline;
++    LARGE_INTEGER now {}, frequency {};
++    QueryPerformanceCounter(&now);
++    QueryPerformanceFrequency(&frequency);
++    result.epoch = epoch;
++    result.clientPresents = clientPresents.load();
++    result.nativePresentCalls = nativeTotal;
++    result.displayedFrames = displayTotal;
++    result.sampleQpc = now.QuadPart;
++    result.qpcFrequency = frequency.QuadPart;
++    return 1;
++}
++}
++
++void LocalPresentationStats::RecordClientPresent(IDXGISwapChain* swapchain) noexcept
++{
++    const auto& state = State::Instance();
++    if (state.activeFgOutput == FGOutput::DLSSG && state.swapchainInteropApi == SwapchainInteropApi::Dx11wDx12 &&
++        swapchain == state.currentFGSwapchain)
++        clientPresents.fetch_add(1);
++}
++
++void LocalPresentationStats::Invalidate() noexcept { lifecycleGeneration.fetch_add(1); }
++
++extern "C" int __cdecl OptiScaler_GetPresentationStatsV1(OptiScalerPresentationStatsV1* output, std::uint32_t bytes)
++{
++    if (output == nullptr || bytes < sizeof(OptiScalerPresentationStatsV1))
++        return -1;
++    OptiScalerPresentationStatsV1 snapshot {};
++    snapshot.size = sizeof(snapshot);
++    snapshot.version = 1;
++    snapshot.nativeQueryHResult = snapshot.displayQueryHResult = E_NOTIMPL;
++    try
++    {
++        const int status = ReadSnapshot(snapshot);
++        *output = snapshot;
++        return status;
++    }
++    catch (...)
++    {
++        snapshot.flags = 0;
++        *output = snapshot;
++        return -2;
++    }
++}
+diff --git a/OptiScaler/framegen/PresentationStats.h b/OptiScaler/framegen/PresentationStats.h
+new file mode 100644
+index 0000000..5f805ec
+--- /dev/null
++++ b/OptiScaler/framegen/PresentationStats.h
+@@ -0,0 +1,36 @@
++#pragma once
++#include <cstdint>
++#include <dxgi.h>
++
++#pragma pack(push, 8)
++struct OptiScalerPresentationStatsV1
++{
++    std::uint32_t size, version;
++    std::uint64_t epoch, clientPresents, nativePresentCalls, displayedFrames;
++    std::uint64_t sampleQpc, qpcFrequency;
++    std::uint32_t flags, nativeRaw, displayRaw, presentRefresh, syncRefresh;
++    std::int32_t nativeQueryHResult, displayQueryHResult;
++    std::uint32_t requestedMultiplier;
++    std::uint64_t lastDisplayQpc;
++};
++#pragma pack(pop)
++static_assert(sizeof(OptiScalerPresentationStatsV1) == 96);
++
++enum OptiScalerPresentationFlags : std::uint32_t
++{
++    PresentationVisibleChain = 1, PresentationNativeCounter = 2, PresentationDisplayStatistics = 4,
++    PresentationFgActive = 8, PresentationDlssg = 16, PresentationDx11Interop = 32,
++    PresentationNewBaseline = 64
++};
++
++// Call on the render/present thread. 1=snapshot, 0=unavailable, -1=bad arguments,
++// -2=exception. Query validity is separately indicated by flags/HRESULTs.
++// Compare deltas only within the same epoch; counters are never reset by reads.
++// displayedFrames accumulates DXGI-reported PresentCount deltas, NOT panel scans.
++using OptiScalerGetPresentationStatsV1 = int(__cdecl*)(OptiScalerPresentationStatsV1*, std::uint32_t);
++
++namespace LocalPresentationStats
++{
++void RecordClientPresent(IDXGISwapChain* swapchain) noexcept;
++void Invalidate() noexcept;
++}
+diff --git a/OptiScaler/hooks/FG_Hooks.cpp b/OptiScaler/hooks/FG_Hooks.cpp
+index cb98956..2ad1047 100644
+--- a/OptiScaler/hooks/FG_Hooks.cpp
++++ b/OptiScaler/hooks/FG_Hooks.cpp
+@@ -6,6 +6,7 @@
+ #include <framegen/xefg/XeFG_Dx12.h>
+ #include <framegen/dlssg/DLSSG_Dx12.h>
+ #include <framegen/reprojection/Reprojection_Dx12.h>
++#include <framegen/PresentationStats.h>
+ 
+ #include <inputs/FG/FSR3_Dx12_FG.h>
+ #include <inputs/FG/FfxApi_Dx12_FG.h>
+@@ -800,6 +801,7 @@ HRESULT FGHooks::hkResizeBuffers(IDXGISwapChain* This, UINT BufferCount, UINT Wi
+ 
+     if (result == S_OK)
+     {
++        LocalPresentationStats::Invalidate();
+         if (fg != nullptr)
+         {
+             State::Instance().fgChanged = true;
+@@ -1043,6 +1045,7 @@ HRESULT FGHooks::hkResizeBuffers1(IDXGISwapChain3* This, UINT BufferCount, UINT
+ 
+     if (result == S_OK)
+     {
++        LocalPresentationStats::Invalidate();
+         if (fg != nullptr)
+         {
+             State::Instance().fgChanged = true;
+@@ -1328,6 +1331,8 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
+     if (result == S_OK)
+     {
+         LOG_DEBUG("Result: {:X}", result);
++        if (willPresent)
++            LocalPresentationStats::RecordClientPresent(This);
+     }
+     else
+     {
+@@ -1464,6 +1469,7 @@ ULONG FGHooks::hkFGRelease(IUnknown* This)
+             }
+ 
+             LOG_DEBUG("FG Swapchain released, clearing currentFGSwapchain");
++            LocalPresentationStats::Invalidate();
+             State::Instance().currentFGSwapchain = nullptr;
+ 
+             if (State::Instance().currentWrappedSwapchain != nullptr &&
+diff --git a/OptiScaler/hudfix/ExternalHudless_Dx11.h b/OptiScaler/hudfix/ExternalHudless_Dx11.h
+new file mode 100644
+index 0000000..768815a
+--- /dev/null
++++ b/OptiScaler/hudfix/ExternalHudless_Dx11.h
+@@ -0,0 +1,27 @@
++// Local Last Epoch integration extension to OptiScaler v1.2.1. GPL-3.0.
++#pragma once
++
++#include <cstdint>
++#include <d3d11.h>
++
++// Resolve these names with GetProcAddress from the local variant of version.dll.
++// All calls must be made on the game's immediate D3D11 rendering thread.
++using OptiScalerGetHudlessD3D11Version = unsigned int(__cdecl*)();
++using OptiScalerGetHudlessFrameTokenD3D11 = std::uint64_t(__cdecl*)();
++using OptiScalerSubmitHudlessD3D11 = int(__cdecl*)(ID3D11DeviceContext*, ID3D11Texture2D*, std::uint64_t);
++
++enum class OptiScalerHudlessResult : int
++{
++    Exception = -10,
++    DeferredContext = -9,
++    WrongDevice = -8,
++    ConfigurationConflict = -7,
++    PublishFailed = -6,
++    CopyFailed = -5,
++    InvalidTexture = -4,
++    AlreadySubmitted = -3,
++    StaleFrame = -2,
++    InvalidArgument = -1,
++    Inactive = 0,
++    Submitted = 1,
++};
+diff --git a/OptiScaler/hudfix/Hudfix_Dx11.cpp b/OptiScaler/hudfix/Hudfix_Dx11.cpp
+index 447ae62..373d04a 100644
+--- a/OptiScaler/hudfix/Hudfix_Dx11.cpp
++++ b/OptiScaler/hudfix/Hudfix_Dx11.cpp
+@@ -511,7 +511,8 @@ bool Hudfix_Dx11::CopyCaptureResource(ID3D11DeviceContext* context, Dx11Resource
+     return true;
+ }
+ 
+-bool Hudfix_Dx11::PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceInfo* source, int index)
++bool Hudfix_Dx11::PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceInfo* source, int index,
++                                     int explicitFrameIndex, UINT64 explicitFrameId)
+ {
+     if (context == nullptr || source == nullptr || _captureBuffer[index] == nullptr)
+         return false;
+@@ -521,7 +522,7 @@ bool Hudfix_Dx11::PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceI
+     if (fg == nullptr)
+         return false;
+ 
+-    const auto activeUpscaleFrame = ActiveUpscaleFrame();
++    const auto activeUpscaleFrame = explicitFrameId != 0 ? explicitFrameId : ActiveUpscaleFrame();
+     const auto frameId = activeUpscaleFrame == 0 ? 1 : activeUpscaleFrame;
+     const bool dontUseNTShared = Config::Instance()->DontUseNTShared.value_or_default();
+ 
+@@ -542,7 +543,7 @@ bool Hudfix_Dx11::PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceI
+     if (shared == nullptr)
+         return false;
+ 
+-    auto* cmdList = fg->GetUICommandList();
++    auto* cmdList = fg->GetUICommandList(explicitFrameIndex);
+     if (cmdList == nullptr)
+         return false;
+ 
+@@ -552,7 +553,7 @@ bool Hudfix_Dx11::PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceI
+     setResource.top = 0;
+     setResource.width = state.currentSwapchainDesc.BufferDesc.Width;
+     setResource.height = state.currentSwapchainDesc.BufferDesc.Height;
+-    setResource.frameIndex = fg->GetIndexWillBeDispatched();
++    setResource.frameIndex = explicitFrameIndex >= 0 ? explicitFrameIndex : fg->GetIndexWillBeDispatched();
+ 
+     if (!CompareResourceFormats(source->format, state.currentSwapchainDesc.BufferDesc.Format))
+     {
+@@ -746,6 +747,142 @@ bool Hudfix_Dx11::CheckForHudless(ID3D11DeviceContext* context, Dx11ResourceInfo
+     return true;
+ }
+ 
++UINT64 Hudfix_Dx11::GetExternalFrameToken()
++{
++    auto& state = State::Instance();
++    auto& config = *Config::Instance();
++    auto* fg = state.currentFG;
++    if (state.isShuttingDown || state.fgChanged || fg == nullptr ||
++        state.activeFgInput != FGInput::Upscaler ||
++        state.swapchainInteropApi != SwapchainInteropApi::Dx11wDx12 ||
++        !config.FGEnabled.value_or_default() || config.FGHUDFix.value_or_default() ||
++        config.FGDisableHudless.value_or_default() || !config.FGUseMutexForSwapchain.value_or_default())
++        return 0;
++
++    // Use the same presentation mutex as FGPresent/ReleaseSwapchain. Never call
++    // this export recursively from inside one of those operations.
++    OwnedLockGuard frameLock(fg->Mutex, 5);
++    std::lock_guard<std::mutex> captureLock(_checkMutex);
++    if (!fg->IsActive() || fg->IsPaused() || fg->IsDispatched() || fg->FrameCount() == 0 ||
++        !fg->HasResource(FG_ResourceType::Depth) || !fg->HasResource(FG_ResourceType::Velocity))
++        return 0;
++
++    if (_externalFeature != fg || _externalFrame != fg->FrameCount() || _externalToken == 0)
++    {
++        if (++_externalNextToken == 0)
++            ++_externalNextToken;
++        _externalToken = _externalNextToken;
++        _externalFrame = fg->FrameCount();
++        _externalFeature = fg;
++        _externalSubmitted = false;
++    }
++    return _externalSubmitted ? 0 : _externalToken;
++}
++
++int Hudfix_Dx11::SubmitExternalHudless(ID3D11DeviceContext* context, ID3D11Texture2D* texture, UINT64 token)
++{
++    if (context == nullptr || texture == nullptr || token == 0)
++        return -1;
++    if (context->GetType() != D3D11_DEVICE_CONTEXT_IMMEDIATE)
++        return -9;
++
++    auto& state = State::Instance();
++    auto& config = *Config::Instance();
++    auto* fg = state.currentFG;
++    if (state.isShuttingDown || state.fgChanged || fg == nullptr ||
++        state.activeFgInput != FGInput::Upscaler ||
++        state.swapchainInteropApi != SwapchainInteropApi::Dx11wDx12 ||
++        !config.FGEnabled.value_or_default())
++        return 0;
++    if (config.FGHUDFix.value_or_default() || config.FGDisableHudless.value_or_default() ||
++        !config.FGUseMutexForSwapchain.value_or_default())
++        return -7;
++
++    OwnedLockGuard frameLock(fg->Mutex, 5);
++    std::lock_guard<std::mutex> captureLock(_checkMutex);
++    if (token != _externalToken || _externalFeature != fg || _externalFrame != fg->FrameCount() ||
++        !fg->IsActive() || fg->IsPaused() || fg->IsDispatched())
++        return -2;
++    if (_externalSubmitted || fg->IsUsingHudless(fg->GetIndex()))
++        return -3;
++
++    ID3D11Device* contextDevice = nullptr;
++    ID3D11Device* textureDevice = nullptr;
++    context->GetDevice(&contextDevice);
++    texture->GetDevice(&textureDevice);
++    IUnknown* contextIdentity = nullptr;
++    IUnknown* textureIdentity = nullptr;
++    IUnknown* interopIdentity = nullptr;
++    if (contextDevice != nullptr)
++        contextDevice->QueryInterface(IID_PPV_ARGS(&contextIdentity));
++    if (textureDevice != nullptr)
++        textureDevice->QueryInterface(IID_PPV_ARGS(&textureIdentity));
++    if (auto* interopDevice = Dx11WithDx12::GetD3D11Device(); interopDevice != nullptr)
++        interopDevice->QueryInterface(IID_PPV_ARGS(&interopIdentity));
++    // COM identity is guaranteed for IUnknown, unlike different device interfaces.
++    const bool sameDevice = contextIdentity != nullptr && contextIdentity == textureIdentity &&
++                            contextIdentity == interopIdentity;
++    SAFE_RELEASE(contextIdentity);
++    SAFE_RELEASE(textureIdentity);
++    SAFE_RELEASE(interopIdentity);
++    if (contextDevice != nullptr)
++        contextDevice->Release();
++    if (textureDevice != nullptr)
++        textureDevice->Release();
++    if (!sameDevice)
++        return -8;
++
++    // API1 is deliberately limited to SDR 8-bit presentation. Do not silently
++    // quantize an HDR/10-bit backbuffer or infer a transfer function from format.
++    const auto isSdr8Format = [](DXGI_FORMAT format, bool allowTypeless) {
++        return format == DXGI_FORMAT_R8G8B8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
++               format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
++               (allowTypeless && (format == DXGI_FORMAT_R8G8B8A8_TYPELESS ||
++                                  format == DXGI_FORMAT_B8G8R8A8_TYPELESS));
++    };
++    if (!isSdr8Format(state.currentSwapchainDesc.BufferDesc.Format, false))
++        return -4;
++
++    Dx11ResourceInfo resource {};
++    if (!FillResourceInfo(texture, Dx11ResourceType::SRV, Dx11CaptureInfo::None, &resource) ||
++        resource.arraySize != 1 || resource.sampleCount != 1 || !isSdr8Format(resource.format, true) ||
++        (resource.bindFlags & (D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_DECODER | D3D11_BIND_VIDEO_ENCODER)) != 0 ||
++        resource.width != state.currentSwapchainDesc.BufferDesc.Width ||
++        resource.height != state.currentSwapchainDesc.BufferDesc.Height ||
++        resource.width == 0 || resource.height == 0)
++        return -4;
++
++    // We require display-sized, display-oriented content. Unlike heuristic
++    // capture this path never crops/centers or guesses a draw. The caller must
++    // provide final postprocessed scene color, not the earlier SR output.
++    resource.extended = false;
++    const int index = fg->GetIndex();
++    ScopedSkipDx11HudfixTracking skipTracking;
++    if (!CopyCaptureResource(context, &resource, index))
++        return -5;
++    if (!PublishCaptureToFg(context, &resource, index, index, _externalFrame))
++        return -6;
++
++    _externalSubmitted = true;
++    LOG_DEBUG("External D3D11 HUDless submitted: token {}, FG frame {}, index {}", token, _externalFrame, index);
++    return 1;
++}
++
++extern "C" unsigned int __cdecl OptiScaler_GetHudlessD3D11Version() { return 1; }
++
++extern "C" UINT64 __cdecl OptiScaler_GetHudlessFrameTokenD3D11()
++{
++    try { return Hudfix_Dx11::GetExternalFrameToken(); }
++    catch (...) { return 0; }
++}
++
++extern "C" int __cdecl OptiScaler_SubmitHudlessD3D11(ID3D11DeviceContext* context, ID3D11Texture2D* texture,
++                                                    UINT64 token)
++{
++    try { return Hudfix_Dx11::SubmitExternalHudless(context, texture, token); }
++    catch (...) { return -10; }
++}
++
+ void Hudfix_Dx11::ResetCounters()
+ {
+     std::lock_guard<std::mutex> checkLock(_checkMutex);
+@@ -753,6 +890,11 @@ void Hudfix_Dx11::ResetCounters()
+ 
+     _fgCounter = 0;
+     _upscaleCounter = 0;
++
++    _externalToken = 0;
++    _externalFrame = 0;
++    _externalFeature = nullptr;
++    _externalSubmitted = false;
+     _frameTime = 0.0;
+     _skipTracking = false;
+     _skipHudlessChecks = false;
+@@ -767,6 +909,11 @@ void Hudfix_Dx11::ReleaseResources()
+ {
+     std::lock_guard<std::mutex> lock(_checkMutex);
+ 
++    _externalToken = 0;
++    _externalFrame = 0;
++    _externalFeature = nullptr;
++    _externalSubmitted = false;
++
+     for (size_t i = 0; i < BUFFER_COUNT; ++i)
+     {
+         Dx11WithDx12::ReleaseSharedResource(&_sharedCapture[i]);
+diff --git a/OptiScaler/hudfix/Hudfix_Dx11.h b/OptiScaler/hudfix/Hudfix_Dx11.h
+index e2d31c1..acb6c8d 100644
+--- a/OptiScaler/hudfix/Hudfix_Dx11.h
++++ b/OptiScaler/hudfix/Hudfix_Dx11.h
+@@ -92,6 +92,14 @@ class Hudfix_Dx11
+     inline static std::mutex _counterMutex;
+     inline static INT64 _captureCounter[BUFFER_COUNT] = {};
+ 
++    // Explicit late capture is independent of heuristic HUDFix counters. Tokens
++    // are unique within this process and are invalidated on feature/reset paths.
++    inline static UINT64 _externalNextToken = 0;
++    inline static UINT64 _externalToken = 0;
++    inline static UINT64 _externalFrame = 0;
++    inline static void* _externalFeature = nullptr;
++    inline static bool _externalSubmitted = false;
++
+     static bool CheckCapture();
+     static void HudlessFound();
+     static int GetIndex();
+@@ -101,7 +109,8 @@ class Hudfix_Dx11
+ 
+     static bool CreateCaptureResource(ID3D11DeviceContext* context, const Dx11ResourceInfo& source, int index);
+     static bool CopyCaptureResource(ID3D11DeviceContext* context, Dx11ResourceInfo* source, int index);
+-    static bool PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceInfo* source, int index);
++    static bool PublishCaptureToFg(ID3D11DeviceContext* context, Dx11ResourceInfo* source, int index,
++                                   int explicitFrameIndex = -1, UINT64 explicitFrameId = 0);
+ 
+   public:
+     static void UpscaleStart();
+@@ -120,6 +129,11 @@ class Hudfix_Dx11
+     static bool CheckResource(Dx11ResourceInfo* resource);
+     static bool CheckForHudless(ID3D11DeviceContext* context, Dx11ResourceInfo* resource, bool ignoreBlocked = false);
+ 
++    // Call on the immediate rendering thread, after NGX evaluate and after final
++    // postprocessing respectively. See docs/LATE-HUDLESS-D3D11.md.
++    static UINT64 GetExternalFrameToken();
++    static int SubmitExternalHudless(ID3D11DeviceContext* context, ID3D11Texture2D* texture, UINT64 token);
++
+     static void ResetCounters();
+     static void ReleaseResources();
+ 
+diff --git a/OptiScaler/include/imgui/imgui_impl_dx12.cpp b/OptiScaler/include/imgui/imgui_impl_dx12.cpp
+index 2d28923..b3512b4 100644
+--- a/OptiScaler/include/imgui/imgui_impl_dx12.cpp
++++ b/OptiScaler/include/imgui/imgui_impl_dx12.cpp
+@@ -59,6 +59,9 @@
+ #include <d3d12.h>
+ #include <dxgi1_4.h>
+ #include <d3dcompiler.h>
++#include <mutex>
++#include <memory>
++#include <wrl/client.h>
+ #ifdef _MSC_VER
+ #pragma comment(lib, "d3dcompiler") // Automatically link with d3dcompiler.lib as we are using D3DCompile() below.
+ #endif
+@@ -66,6 +69,23 @@
+ // DirectX12 data
+ struct ImGui_ImplDX12_RenderBuffers;
+ 
++// Local OptiScaler variant: retain uploads until a checked fence completes.
++// A timeout skips menu drawing; it must not free command/upload memory still
++// referenced by the GPU. No ImGui/texture pointer is kept in retired records.
++struct ImGui_ImplDX12_PendingUpload
++{
++    ID3D12Device* Device = nullptr;
++    ID3D12CommandQueue* Queue = nullptr;
++    ID3D12Resource* Texture = nullptr;
++    ID3D12Resource* Upload = nullptr;
++    ID3D12CommandAllocator* Allocator = nullptr;
++    ID3D12GraphicsCommandList* List = nullptr;
++    ID3D12Fence* Fence = nullptr;
++    HANDLE Event = nullptr;
++    bool Signaled = false;
++    ImGui_ImplDX12_PendingUpload* Next = nullptr;
++};
++
+ struct ImGui_ImplDX12_Texture
+ {
+     ID3D12Resource*             pTextureResource;
+@@ -89,10 +109,88 @@ struct ImGui_ImplDX12_Data
+     UINT                        numFramesInFlight;
+     ImGui_ImplDX12_Texture      FontTexture;
+     bool                        LegacySingleDescriptorUsed;
++    ImGui_ImplDX12_PendingUpload* PendingUploads;
++    bool                        UploadDeviceLost;
+ 
+     ImGui_ImplDX12_Data()       { memset((void*)this, 0, sizeof(*this)); }
+ };
+ 
++static std::mutex g_retiredUploadMutex;
++static ImGui_ImplDX12_PendingUpload* g_retiredUploads = nullptr;
++
++static bool ImGui_ImplDX12_UploadCompleted(ImGui_ImplDX12_PendingUpload* upload, DWORD timeout_ms, bool& device_lost)
++{
++    const ULONGLONG started = GetTickCount64();
++    for (;;)
++    {
++        const UINT64 completed = upload->Fence->GetCompletedValue();
++        if (completed == UINT64_MAX || FAILED(upload->Device->GetDeviceRemovedReason()))
++        {
++            device_lost = true;
++            return true;
++        }
++        if (!upload->Signaled)
++            upload->Signaled = SUCCEEDED(upload->Queue->Signal(upload->Fence, 1));
++        if (upload->Signaled && completed >= 1)
++            return true;
++        const ULONGLONG elapsed = GetTickCount64() - started;
++        if (!upload->Signaled || elapsed >= timeout_ms)
++            return false;
++        if (FAILED(upload->Fence->SetEventOnCompletion(1, upload->Event)))
++            return false;
++        const DWORD remaining = static_cast<DWORD>(timeout_ms - elapsed);
++        if (WaitForSingleObject(upload->Event, remaining < 10 ? remaining : 10) == WAIT_FAILED)
++            return false;
++    }
++}
++
++static void ImGui_ImplDX12_ReleaseUpload(ImGui_ImplDX12_PendingUpload* upload)
++{
++    upload->List->Release();
++    upload->Allocator->Release();
++    upload->Upload->Release();
++    upload->Texture->Release();
++    upload->Fence->Release();
++    CloseHandle(upload->Event);
++    upload->Queue->Release();
++    upload->Device->Release();
++    delete upload;
++}
++
++static bool ImGui_ImplDX12_FinishUploads(ImGui_ImplDX12_Data* bd, DWORD timeout_ms)
++{
++    if (FAILED(bd->pd3dDevice->GetDeviceRemovedReason()))
++        bd->UploadDeviceLost = true;
++    auto** link = &bd->PendingUploads;
++    while (*link)
++    {
++        auto* upload = *link;
++        if (!ImGui_ImplDX12_UploadCompleted(upload, timeout_ms, bd->UploadDeviceLost))
++            return false;
++        *link = upload->Next;
++        ImGui_ImplDX12_ReleaseUpload(upload);
++    }
++    return !bd->UploadDeviceLost;
++}
++
++static void ImGui_ImplDX12_CollectRetiredUploads()
++{
++    const std::lock_guard<std::mutex> lock(g_retiredUploadMutex);
++    auto** link = &g_retiredUploads;
++    while (*link)
++    {
++        auto* upload = *link;
++        bool device_lost = false;
++        if (!ImGui_ImplDX12_UploadCompleted(upload, 0, device_lost))
++        {
++            link = &upload->Next;
++            continue;
++        }
++        *link = upload->Next;
++        ImGui_ImplDX12_ReleaseUpload(upload);
++    }
++}
++
+ // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
+ // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
+ static ImGui_ImplDX12_Data* ImGui_ImplDX12_GetBackendData()
+@@ -261,15 +359,25 @@ void ImGui_ImplDX12_RenderDrawData(ImDrawData* draw_data, ID3D12GraphicsCommandL
+     if (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f)
+         return;
+ 
++    ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
++    ImGui_ImplDX12_CollectRetiredUploads();
++    if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++        return;
++
+     // Catch up with texture updates. Most of the times, the list will have 1 element with an OK status, aka nothing to do.
+     // (This almost always points to ImGui::GetPlatformIO().Textures[] but is part of ImDrawData to allow overriding or disabling texture updates).
+     if (draw_data->Textures != nullptr)
+         for (ImTextureData* tex : *draw_data->Textures)
++        {
+             if (tex->Status != ImTextureStatus_OK)
+                 ImGui_ImplDX12_UpdateTexture(tex);
++            if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++                return;
++            if (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates)
++                return; // Allocation/map/recording failure: never sample an uninitialized texture.
++        }
+ 
+     // FIXME: We are assuming that this only gets called once per frame!
+-    ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
+     ImGui_ImplDX12_ViewportData* vd = (ImGui_ImplDX12_ViewportData*)draw_data->OwnerViewport->RendererUserData;
+     vd->FrameIndex++;
+     ImGui_ImplDX12_RenderBuffers* fr = &vd->FrameRenderBuffers[vd->FrameIndex % bd->numFramesInFlight];
+@@ -423,9 +531,11 @@ static void ImGui_ImplDX12_DestroyTexture(ImTextureData* tex)
+ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+ {
+     ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
+-    bool need_barrier_before_copy = true; // Do we need a resource barrier before we copy new data in?
++    if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++        return;
++    bool need_barrier_before_copy = tex->Status != ImTextureStatus_WantCreate;
+ 
+-    if (tex->Status == ImTextureStatus_WantCreate)
++    if (tex->Status == ImTextureStatus_WantCreate && tex->BackendUserData == nullptr)
+     {
+         // Create and upload new texture to graphics system
+         //IMGUI_DEBUG_LOG("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height);
+@@ -454,8 +564,14 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+ 
+         ID3D12Resource* pTexture = nullptr;
+-        bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
++        const HRESULT texture_result = bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
+             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pTexture));
++        if (FAILED(texture_result))
++        {
++            bd->InitInfo.SrvDescriptorFreeFn(&bd->InitInfo, backend_tex->hFontSrvCpuDescHandle, backend_tex->hFontSrvGpuDescHandle);
++            IM_DELETE(backend_tex);
++            return;
++        }
+ 
+         // Create SRV
+         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+@@ -517,34 +633,40 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+ 
+         // FIXME-OPT: Can upload buffer be reused?
+-        ID3D12Resource* uploadBuffer = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer;
+         HRESULT hr = bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
+             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         // Create temporary command list and execute immediately
+-        ID3D12Fence* fence = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+         hr = bd->pd3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+-        HANDLE event = ::CreateEvent(0, 0, 0, 0);
+-        IM_ASSERT(event != nullptr);
++        std::unique_ptr<void, decltype(&CloseHandle)> event(::CreateEvent(0, 0, 0, 0), &CloseHandle);
++        if (!event)
++            return;
+ 
+         // FIXME-OPT: Create once and reuse?
+-        ID3D12CommandAllocator* cmdAlloc = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
+         hr = bd->pd3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cmdAlloc));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         // FIXME-OPT: Can be use the one from user? (pass ID3D12GraphicsCommandList* to ImGui_ImplDX12_UpdateTextures)
+-        ID3D12GraphicsCommandList* cmdList = nullptr;
+-        hr = bd->pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc, nullptr, IID_PPV_ARGS(&cmdList));
+-        IM_ASSERT(SUCCEEDED(hr));
++        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
++        hr = bd->pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(&cmdList));
++        if (FAILED(hr))
++            return;
+ 
+         // Copy to upload buffer
+         void* mapped = nullptr;
+         D3D12_RANGE range = { 0, upload_size };
+         hr = uploadBuffer->Map(0, &range, &mapped);
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+         for (int y = 0; y < upload_h; y++)
+             memcpy((void*)((uintptr_t)mapped + y * upload_pitch_dst), tex->GetPixelsAt(upload_x, upload_y + y), upload_pitch_src);
+         uploadBuffer->Unmap(0, &range);
+@@ -564,7 +686,7 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+         D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+         {
+-            srcLocation.pResource = uploadBuffer;
++            srcLocation.pResource = uploadBuffer.Get();
+             srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+             srcLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+             srcLocation.PlacedFootprint.Footprint.Width = upload_w;
+@@ -589,26 +711,31 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         }
+ 
+         hr = cmdList->Close();
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         ID3D12CommandQueue* cmdQueue = bd->pCommandQueue;
+-        cmdQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&cmdList);
+-        hr = cmdQueue->Signal(fence, 1);
+-        IM_ASSERT(SUCCEEDED(hr));
+-
+-        // FIXME-OPT: Suboptimal?
+-        // - To remove this may need to create NumFramesInFlight x ImGui_ImplDX12_FrameContext in backend data (mimick docking version)
+-        // - Store per-frame in flight: upload buffer?
+-        // - Where do cmdList and cmdAlloc fit?
+-        fence->SetEventOnCompletion(1, event);
+-        ::WaitForSingleObject(event, INFINITE);
+-
+-        cmdList->Release();
+-        cmdAlloc->Release();
+-        ::CloseHandle(event);
+-        fence->Release();
+-        uploadBuffer->Release();
++        auto* pending = new ImGui_ImplDX12_PendingUpload;
++        pending->Device = bd->pd3dDevice;
++        pending->Device->AddRef();
++        pending->Queue = cmdQueue;
++        pending->Queue->AddRef();
++        pending->Texture = backend_tex->pTextureResource;
++        pending->Texture->AddRef();
++        pending->Upload = uploadBuffer.Detach();
++        pending->Allocator = cmdAlloc.Detach();
++        pending->List = cmdList.Detach();
++        pending->Fence = fence.Detach();
++        pending->Event = event.release();
++        pending->Next = bd->PendingUploads;
++        bd->PendingUploads = pending;
++        ID3D12CommandList* lists[] = { pending->List };
++        cmdQueue->ExecuteCommandLists(1, lists);
++        pending->Signaled = SUCCEEDED(cmdQueue->Signal(pending->Fence, 1));
++        // Future texture updates retain their own status while this upload is
++        // pending. RenderDrawData checks the fence before sampling the texture.
+         tex->SetStatus(ImTextureStatus_OK);
++        ImGui_ImplDX12_FinishUploads(bd, 50);
+     }
+ 
+     if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= (int)bd->numFramesInFlight)
+@@ -967,6 +1094,21 @@ void ImGui_ImplDX12_Shutdown(bool shutdown_platform, bool invalidate)
+     IM_ASSERT(bd != nullptr && "No renderer backend to shutdown, or already shutdown?");
+     ImGuiIO& io = ImGui::GetIO();
+ 
++    // Keep ordinary-timeout uploads alive across context destruction. Retired
++    // records own only COM resources, so no destroyed ImGui object is touched.
++    ImGui_ImplDX12_FinishUploads(bd, 50);
++    if (bd->PendingUploads)
++    {
++        const std::lock_guard<std::mutex> lock(g_retiredUploadMutex);
++        auto* last = bd->PendingUploads;
++        while (last->Next)
++            last = last->Next;
++        last->Next = g_retiredUploads;
++        g_retiredUploads = bd->PendingUploads;
++        bd->PendingUploads = nullptr;
++    }
++    ImGui_ImplDX12_CollectRetiredUploads();
++
+     // Manually delete main viewport render resources in-case we haven't initialized for viewports
+     ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+     if (ImGui_ImplDX12_ViewportData* vd = (ImGui_ImplDX12_ViewportData*)main_viewport->RendererUserData)
+diff --git a/OptiScaler/menu/menu_overlay_dx.cpp b/OptiScaler/menu/menu_overlay_dx.cpp
+index 30f6b7d..39bf46f 100644
+--- a/OptiScaler/menu/menu_overlay_dx.cpp
++++ b/OptiScaler/menu/menu_overlay_dx.cpp
+@@ -5,6 +5,9 @@
+ #include <Util.h>
+ #include <Logger.h>
+ #include <Config.h>
++#include <atomic>
++#include <mutex>
++#include <wrl/client.h>
+ 
+ #include <imgui/imgui_impl_dx11.h>
+ #include <imgui/imgui_impl_dx12.h>
+@@ -35,6 +38,68 @@ static D3D12_CPU_DESCRIPTOR_HANDLE g_mainRenderTargetDescriptor[NUM_BACK_BUFFERS
+ // current command queue for dx12 swapchain
+ static IUnknown* currentSCCommandQueue = nullptr;
+ 
++// Local variant: serialize CPU lifetime changes and explicitly retire GPU work.
++// Present uses try_lock so a resize never waits for another Present to enter.
++// Fence waits refer only to a Signal already submitted while holding this lock;
++// no future submission/FG callback is required to make that fence complete.
++static std::mutex g_overlayMutex;
++static std::atomic<ID3D12GraphicsCommandList*> g_trackedMenuCommandList { nullptr };
++static Microsoft::WRL::ComPtr<ID3D12Device> g_ownedDevice;
++static Microsoft::WRL::ComPtr<ID3D12CommandQueue> g_ownedQueue;
++static Microsoft::WRL::ComPtr<IUnknown> g_swapchainIdentity;
++static Microsoft::WRL::ComPtr<ID3D12Fence> g_overlayFence;
++static DXGI_SWAP_CHAIN_DESC g_overlayDesc {};
++static HANDLE g_overlayFenceEvent = nullptr;
++static UINT64 g_overlayFenceValue = 0;
++static UINT64 g_lastOverlaySubmission = 0;
++static bool g_unfencedOverlaySubmission = false;
++static bool g_overlayWaitWarning = false;
++
++enum class OverlayGpuStatus { Complete, Pending, DeviceLost };
++
++static OverlayGpuStatus WaitForOverlayGpu(DWORD timeoutMs)
++{
++    if (g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason()))
++        return OverlayGpuStatus::DeviceLost;
++    if (!g_overlayFence)
++        return g_unfencedOverlaySubmission ? OverlayGpuStatus::Pending : OverlayGpuStatus::Complete;
++
++    // A failed Signal must never make submitted command memory look reusable.
++    // Retry on the same owned queue; otherwise retain every resource.
++    if (g_unfencedOverlaySubmission)
++    {
++        const UINT64 value = ++g_overlayFenceValue;
++        if (!g_ownedQueue || FAILED(g_ownedQueue->Signal(g_overlayFence.Get(), value)))
++            return g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason())
++                       ? OverlayGpuStatus::DeviceLost : OverlayGpuStatus::Pending;
++        g_lastOverlaySubmission = value;
++        g_unfencedOverlaySubmission = false;
++    }
++
++    const ULONGLONG start = GetTickCount64();
++    for (;;)
++    {
++        const UINT64 completed = g_overlayFence->GetCompletedValue();
++        if (completed == UINT64_MAX || (g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason())))
++            return OverlayGpuStatus::DeviceLost;
++        if (completed >= g_lastOverlaySubmission)
++        {
++            g_overlayWaitWarning = false;
++            return OverlayGpuStatus::Complete;
++        }
++        const ULONGLONG elapsed = GetTickCount64() - start;
++        if (elapsed >= timeoutMs || !g_overlayFenceEvent)
++            return OverlayGpuStatus::Pending;
++        // Register once per short wait, then recheck the fence: an event may
++        // also be signalled by an earlier timed-out registration.
++        if (FAILED(g_overlayFence->SetEventOnCompletion(g_lastOverlaySubmission, g_overlayFenceEvent)))
++            return OverlayGpuStatus::Pending;
++        const DWORD slice = static_cast<DWORD>((std::min)(ULONGLONG(10), ULONGLONG(timeoutMs) - elapsed));
++        if (WaitForSingleObject(g_overlayFenceEvent, slice) == WAIT_FAILED)
++            return OverlayGpuStatus::Pending;
++    }
++}
++
+ // status
+ static bool _isInited = false;
+ static bool _d3d12Captured = false;
+@@ -76,7 +141,7 @@ static int GetCorrectDXGIFormat(int eCurrentFormat)
+     return eCurrentFormat;
+ }
+ 
+-static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapChain)
++static bool CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapChain)
+ {
+     LOG_FUNC();
+ 
+@@ -86,7 +151,13 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+     if (hr != S_OK)
+     {
+         LOG_ERROR("pSwapChain->GetDesc: {0:X}", (unsigned long) hr);
+-        return;
++        return false;
++    }
++
++    if (sd.BufferCount == 0 || sd.BufferCount > NUM_BACK_BUFFERS)
++    {
++        LOG_ERROR("Overlay unsupported swapchain buffer count: {}", sd.BufferCount);
++        return false;
+     }
+ 
+     for (UINT i = 0; i < sd.BufferCount; ++i)
+@@ -97,7 +168,9 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+         if (result != S_OK)
+         {
+             LOG_ERROR("pSwapChain->GetBuffer: {:X}", (unsigned long) result);
+-            return;
++            for (UINT j = 0; j < i; ++j)
++                SAFE_RELEASE(g_mainRenderTargetResource[j]);
++            return false;
+         }
+ 
+         if (pBackBuffer != nullptr)
+@@ -112,12 +185,20 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+     }
+ 
+     LOG_INFO("done!");
++    return true;
+ }
+ 
+-static void CleanupRenderTargetDx12(bool clearQueue)
++static bool CleanupRenderTargetDx12(bool clearQueue)
+ {
+-    if (!_isInited || !_dx12Device || State::Instance().isShuttingDown)
+-        return;
++    // Partial initialization also owns resources. Never infer GPU completion
++    // from a CPU flag or release in-flight memory after an ordinary timeout.
++    if (WaitForOverlayGpu(250) == OverlayGpuStatus::Pending)
++    {
++        if (!g_overlayWaitWarning)
++            LOG_WARN("Overlay GPU drain timed out; retaining resources and skipping reinitialization");
++        g_overlayWaitWarning = true;
++        return false;
++    }
+ 
+     for (UINT i = 0; i < NUM_BACK_BUFFERS; ++i)
+     {
+@@ -144,17 +225,29 @@ static void CleanupRenderTargetDx12(bool clearQueue)
+         }
+ 
+         SAFE_RELEASE(g_pd3dCommandList);
++        g_trackedMenuCommandList.store(nullptr, std::memory_order_release);
+ 
+         if (g_pd3dCommandQueue != nullptr)
+             g_pd3dCommandQueue = nullptr;
+ 
+         g_pd3dSrvDescHeapAlloc.Destroy();
+-
+-        // SAFE_RELEASE(g_pd3dDeviceParam);
++        g_overlayFence.Reset();
++        if (g_overlayFenceEvent)
++            CloseHandle(g_overlayFenceEvent);
++        g_overlayFenceEvent = nullptr;
++        g_overlayFenceValue = g_lastOverlaySubmission = 0;
++        g_unfencedOverlaySubmission = false;
++        g_ownedQueue.Reset();
++        g_ownedDevice.Reset();
++        g_swapchainIdentity.Reset();
++        g_overlayDesc = {};
++        currentSCCommandQueue = nullptr;
++        g_pd3dDeviceParam = nullptr;
+ 
+         _dx12Device = false;
+         _isInited = false;
+     }
++    return true;
+ }
+ 
+ static void CreateRenderTargetDx11(IDXGISwapChain* pSwapChain)
+@@ -292,6 +385,20 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+     // Get device from swapchain
+     ID3D12Device* device = g_pd3dDeviceParam;
+ 
++    // Conservatively retire the previous overlay submission before ImGui can
++    // resize/recycle vertex/index buffers or update/free a texture descriptor.
++    // This also protects every backbuffer allocator, not just matching indices.
++    const auto gpuStatus = WaitForOverlayGpu(50);
++    if (gpuStatus != OverlayGpuStatus::Complete)
++    {
++        if (!g_overlayWaitWarning)
++            LOG_WARN("Overlay GPU unavailable ({}); skipping overlay without reusing resources",
++                     gpuStatus == OverlayGpuStatus::DeviceLost ? "device removed" : "fence pending");
++        g_overlayWaitWarning = true;
++        pSwapChain->Release();
++        return;
++    }
++
+     ImGuiIO& io = ImGui::GetIO();
+     (void) io;
+     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+@@ -303,6 +410,16 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+ 
+         HRESULT result;
+ 
++        result = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_overlayFence));
++        g_overlayFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
++        if (FAILED(result) || !g_overlayFenceEvent)
++        {
++            LOG_ERROR("Overlay completion fence initialization failed: {:X}", (UINT) result);
++            CleanupRenderTargetDx12(true);
++            pSwapChain->Release();
++            return;
++        }
++
+         {
+             D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+             desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+@@ -392,6 +509,7 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+             pSwapChain->Release();
+             return;
+         }
++        g_trackedMenuCommandList.store(g_pd3dCommandList, std::memory_order_release);
+ 
+         DXGI_SWAP_CHAIN_DESC scDesc;
+         pSwapChain->GetDesc(&scDesc);
+@@ -410,7 +528,8 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+             [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
+         { return g_pd3dSrvDescHeapAlloc.Free(cpu_handle, gpu_handle); };
+ 
+-        ImGui_ImplDX12_Init(&initInfo);
++        if (!ImGui_ImplDX12_Init(&initInfo))
++            CleanupRenderTargetDx12(true);
+ 
+         pSwapChain->Release();
+         return;
+@@ -421,7 +540,8 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+         // Generate render targets
+         if (!g_mainRenderTargetResource[0])
+         {
+-            CreateRenderTargetDx12(device, pSwapChain);
++            if (!CreateRenderTargetDx12(device, pSwapChain))
++                CleanupRenderTargetDx12(true);
+             pSwapChain->Release();
+             return;
+         }
+@@ -438,6 +558,12 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+                 ImGui::Render();
+ 
+                 UINT backBufferIdx = pSwapChain->GetCurrentBackBufferIndex();
++                if (backBufferIdx >= NUM_BACK_BUFFERS || !g_mainRenderTargetResource[backBufferIdx])
++                {
++                    LOG_ERROR("Overlay invalid swapchain backbuffer index: {}", backBufferIdx);
++                    pSwapChain->Release();
++                    return;
++                }
+                 ID3D12CommandAllocator* commandAllocator = g_commandAllocators[backBufferIdx];
+ 
+                 auto result = commandAllocator->Reset();
+@@ -485,7 +611,17 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+                 }
+ 
+                 ID3D12CommandList* ppCommandLists[] = { g_pd3dCommandList };
+-                ((ID3D12CommandQueue*) currentSCCommandQueue)->ExecuteCommandLists(1, ppCommandLists);
++                g_ownedQueue->ExecuteCommandLists(1, ppCommandLists);
++                g_unfencedOverlaySubmission = true;
++                const UINT64 submission = ++g_overlayFenceValue;
++                result = g_ownedQueue->Signal(g_overlayFence.Get(), submission);
++                if (SUCCEEDED(result))
++                {
++                    g_lastOverlaySubmission = submission;
++                    g_unfencedOverlaySubmission = false;
++                }
++                else
++                    LOG_ERROR("Overlay queue Signal failed: {:X}; retaining submitted resources", (UINT) result);
+             }
+         }
+         else
+@@ -501,7 +637,11 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+     pSwapChain->Release();
+ }
+ 
+-ID3D12GraphicsCommandList* MenuOverlayDx::MenuCommandList() { return g_pd3dCommandList; }
++ID3D12GraphicsCommandList* MenuOverlayDx::MenuCommandList()
++{
++    // Resource-tracking hooks call this while Present holds g_overlayMutex.
++    return g_trackedMenuCommandList.load(std::memory_order_acquire);
++}
+ 
+ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+ {
+@@ -515,6 +655,9 @@ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+         fg->Deactivate();
+     }
+ 
++    // FG deactivation remains outside our mutex: it may wait for Present.
++    const std::lock_guard<std::mutex> lock(g_overlayMutex);
++
+     if (_dx11Device)
+         CleanupRenderTargetDx11(false);
+     else
+@@ -524,6 +667,9 @@ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags,
+                             const DXGI_PRESENT_PARAMETERS* pPresentParameters, IUnknown* pDevice, HWND hWnd, bool isUWP)
+ {
++    const std::unique_lock<std::mutex> lock(g_overlayMutex, std::try_to_lock);
++    if (!lock.owns_lock() || !pSwapChain || !pDevice || State::Instance().isShuttingDown)
++        return;
+     if (!Config::Instance()->OverlayMenu.value_or_default())
+     {
+         MenuOverlayBase::Present();
+@@ -532,37 +678,52 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+ 
+     LOG_DEBUG("");
+ 
+-    ID3D12CommandQueue* cq = nullptr;
+-    ID3D11Device* device = nullptr;
+-    ID3D12Device* device12 = nullptr;
++    Microsoft::WRL::ComPtr<ID3D12CommandQueue> cq;
++    Microsoft::WRL::ComPtr<ID3D11Device> device;
++    Microsoft::WRL::ComPtr<ID3D12Device> device12;
++    Microsoft::WRL::ComPtr<IUnknown> identity;
++    DXGI_SWAP_CHAIN_DESC desc {};
++    if (FAILED(pSwapChain->QueryInterface(IID_PPV_ARGS(&identity))) || FAILED(pSwapChain->GetDesc(&desc)))
++        return;
+ 
+     // try to obtain directx objects and find the path
+     if (pDevice->QueryInterface(IID_PPV_ARGS(&device)) == S_OK)
+     {
+-        if (!_dx11Device)
+-            LOG_DEBUG("D3D11Device captured");
+-
+-        _dx11Device = true;
++        // D3D11 state is selected only after retiring any previous D3D12 state.
+     }
+     else if (pDevice->QueryInterface(IID_PPV_ARGS(&cq)) == S_OK)
+     {
+-        if (!_dx12Device)
+-            LOG_DEBUG("D3D12CommandQueue captured");
+-
+-        if (!CheckForRealObject(__FUNCTION__, pDevice, &currentSCCommandQueue))
+-            currentSCCommandQueue = pDevice;
+-
+-        if (((ID3D12CommandQueue*) currentSCCommandQueue)->GetDevice(IID_PPV_ARGS(&device12)) == S_OK)
++        IUnknown* realQueue = nullptr;
++        if (CheckForRealObject(__FUNCTION__, pDevice, &realQueue))
+         {
+-            if (!_dx12Device)
+-                LOG_DEBUG("D3D12Device captured");
+-
+-            _dx12Device = true;
++            Microsoft::WRL::ComPtr<ID3D12CommandQueue> unwrapped;
++            if (SUCCEEDED(realQueue->QueryInterface(IID_PPV_ARGS(&unwrapped))))
++                cq = unwrapped;
+         }
++        if (FAILED(cq->GetDevice(IID_PPV_ARGS(&device12))))
++            return;
++    }
++    else
++        return;
++
++    const bool windowChanged = MenuOverlayBase::Handle() != hWnd;
++    const bool dx12Changed = g_ownedDevice &&
++        (device || g_ownedDevice.Get() != device12.Get() || g_ownedQueue.Get() != cq.Get() ||
++         g_swapchainIdentity.Get() != identity.Get() || windowChanged ||
++         g_overlayDesc.BufferCount != desc.BufferCount || g_overlayDesc.BufferDesc.Width != desc.BufferDesc.Width ||
++         g_overlayDesc.BufferDesc.Height != desc.BufferDesc.Height ||
++         g_overlayDesc.BufferDesc.Format != desc.BufferDesc.Format);
++    if (dx12Changed && !CleanupRenderTargetDx12(true))
++        return;
++    if (_dx11Device && (device12 || windowChanged))
++    {
++        CleanupRenderTargetDx11(false);
++        if (ImGui::GetCurrentContext() && ImGui::GetIO().BackendRendererUserData)
++            ImGui_ImplDX11_Shutdown();
+     }
+ 
+     // Process window handle changed, update base
+-    if (MenuOverlayBase::Handle() != hWnd)
++    if (windowChanged)
+     {
+         LOG_DEBUG("Handle changed {:X} -> {:X}", (size_t) MenuOverlayBase::Handle(), (size_t) hWnd);
+ 
+@@ -577,25 +738,31 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+     // Init
+     if (!_isInited)
+     {
+-        if (_dx11Device)
++        if (device)
+         {
+             CleanupRenderTargetDx11(false);
+ 
+-            g_pd3dDevice = device;
++            g_pd3dDevice = device.Get();
++            _dx11Device = true;
++            _dx12Device = false;
+ 
+             CreateRenderTargetDx11(pSwapChain);
+             MenuOverlayBase::Dx11Ready();
+             _isInited = true;
+         }
+-        else if (_dx12Device && (g_pd3dDeviceParam != nullptr || device12 != nullptr))
++        else if (device12)
+         {
+-            if (g_pd3dDeviceParam != nullptr && device12 == nullptr)
+-                device12 = g_pd3dDeviceParam;
+-
+-            CleanupRenderTargetDx12(true);
+-
+-            g_pd3dCommandQueue = cq;
+-            g_pd3dDeviceParam = device12;
++            if (!CleanupRenderTargetDx12(true))
++                return;
++            g_ownedDevice = device12;
++            g_ownedQueue = cq;
++            g_swapchainIdentity = identity;
++            g_overlayDesc = desc;
++            g_pd3dCommandQueue = cq.Get();
++            currentSCCommandQueue = cq.Get();
++            g_pd3dDeviceParam = device12.Get();
++            _dx11Device = false;
++            _dx12Device = true;
+ 
+             MenuOverlayBase::Dx12Ready();
+             _isInited = true;
+@@ -612,15 +779,6 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+             RenderImGui_DX12(pSwapChain);
+     }
+ 
+-    // release used objects
+-    if (cq != nullptr)
+-        cq->Release();
+-
+-    if (device != nullptr)
+-        device->Release();
+-
+-    if (device12 != nullptr)
+-        device12->Release();
+ }
+ 
+ void MenuOverlayDx::ApplyThemeStyle() { MenuOverlayBase::ApplyThemeStyle(); }
+diff --git a/docs/LATE-HUDLESS-D3D11.md b/docs/LATE-HUDLESS-D3D11.md
+new file mode 100644
+index 0000000..10bf1d0
+--- /dev/null
++++ b/docs/LATE-HUDLESS-D3D11.md
+@@ -0,0 +1,79 @@
++# Explicit late HUDless input for Last Epoch
++
++This is a local GPL-3.0 modification of Skynizz/optiscaler-dlss5 v1.2.1,
++commit `6bfc4389c25054ef6747df6e6b1b470e9541c4da`. The source archive SHA256 is
++`1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507`.
++The original archive remains in `../../downloads/optiscaler-source-1.2.1.zip`.
++Keep this source, its GPL license and the original third-party notices with any
++distribution of the modified backend. This variant has not been validated in-game.
++
++## Why the extra submission exists
++
++DLSS SR must run before bloom/color grading, but DLSSG needs display-ready scene
++color after those effects and before the UI is drawn. The upstream heuristic can
++latch the first SR output; submitting that image as HUDless misidentifies later
++postprocessing changes as UI. This extension requires an explicit late callback
++and leaves the heuristic disabled.
++
++## ABI version 1
++
++Resolve the three exported names from the locally built backend using
++`GetProcAddress`; the unmodified backend does not export them. Function pointer
++types and result codes are in `OptiScaler/hudfix/ExternalHudless_Dx11.h`.
++
++1. Check `OptiScaler_GetHudlessD3D11Version() == 1`.
++2. On the immediate render thread, immediately after a successful NGX SR
++   evaluation, call `OptiScaler_GetHudlessFrameTokenD3D11()`. Store its nonzero
++   token with the same camera/frame's bridge state. Zero means unavailable.
++3. Later on that render thread, after final bloom/grading/output transform and
++   before UI, call `OptiScaler_SubmitHudlessD3D11(context, texture, token)` once.
++   Retain the COM texture until the callback executes. The function records a
++   copy immediately, so the source can be released after that callback returns.
++4. Require return value 1 before reporting successful HUDless submission.
++   Stale, already-presented and duplicate frames are rejected. Do not submit a
++   previous camera/frame's token or call NGX Evaluate a second time.
++
++The texture must be single-sampled, one array slice, exactly swapchain-sized and
++in the same orientation and numeric color encoding as the final presented scene.
++API1 accepts only SDR 8-bit RGBA/BGRA UNORM/SRGB swapchains and source textures
++from those format families (including typeless source members used by Unity).
++HDR, 10-bit and float swapchains or inputs return `InvalidTexture` (-4). The
++caller must additionally disable this path when Unity HDR output is active;
++an 8-bit storage format alone does not establish the presentation transfer function.
++The existing format transfer handles a compatible color storage-format change;
++it does not supply tone mapping, gamma conversion, resizing or vertical flipping.
++The bridge must capture the actual final scene, not merely a pre-UI image from an
++earlier stage. Output must differ from the presented backbuffer only by UI.
++
++## Configuration and synchronization
++
++Use `FrameGen.FGInput=Upscaler`, `FrameGen.DisableHudless=false`,
++`OptiFG.HUDFix=false`, and `FSRFG.UseMutexForSwapchain=true` (the default).
++Keep FG disabled until its ordinary depth/motion/color path is validated.
++The explicit API intentionally refuses to coexist with heuristic HUDless capture.
++
++The current FG frame token is captured without starting another frame. Submission
++locks the existing presentation mutex, validates the frame, copies the final
++D3D11 texture into the existing capture ring, shares it with D3D12, calls the
++existing D3D11-to-D3D12 fence synchronization, and tags the exact matching FG
++resource slot. It uses `ValidNow` tagging, allowing Streamline to make its
++required copy. Tokens are invalidated on upstream reset and resource-release
++paths. These safeguards still require runtime resize/Alt-Tab/shutdown testing.
++
++## Build and validation
++
++Run `Build-Local.ps1` from this source tree. It uses installed VS2022 v143 and the
++Windows SDK, and disables upstream packaging build events. The output is isolated
++in `local-build`; the script never copies it to `stage` or a game directory.
++The fork README documents v145, so v143 compatibility must be established by the
++build result. The supplied precompiled shaders and libraries are reused.
++The local v143 build uses embedded compile symbols (`/Z7`) and the 64-bit host
++compiler to avoid the shared PDB manager failure in this environment. Compiler
++parallelism is bounded by `-ParallelProcesses` (default 4). The local source also
++suppresses the upstream frame-gap warning when FG is disabled/inactive; frame
++and resource-ring bookkeeping is unchanged.
++
++Before deploying, verify all three exports, then validate SR/FG with HUDless off.
++After connecting the late callback, compare the tagged HUDless image to the final
++backbuffer with UI hidden; bloom, grading and scene pixels should match. Exercise
++combat, map changes, resize, Alt-Tab, disabled FG and stale/duplicate callbacks.
+diff --git a/docs/PRESENTATION-STATS-V1.md b/docs/PRESENTATION-STATS-V1.md
+new file mode 100644
+index 0000000..c5e9c84
+--- /dev/null
++++ b/docs/PRESENTATION-STATS-V1.md
+@@ -0,0 +1,57 @@
++# Independent presentation telemetry, version 1
++
++This local extension exports `OptiScaler_GetPresentationStatsV1(out, bytes)`.
++Its 96-byte, pack-8 C ABI is defined in
++`OptiScaler/framegen/PresentationStats.h`. Call from the immediate render/present
++thread, outside an existing OptiScaler presentation-mutex critical section.
++Return 1 means a visible-chain snapshot was obtained; check the individual
++validity flags and HRESULTs before using either DXGI counter. Return 0 means
++unavailable, -1 invalid output arguments, and -2 a caught exception.
++
++No Streamline state counter is read or reset. The API unwraps the official
++Streamline native-interface IID, verifies a D3D12 device and the same-process
++visible game HWND, and queries that output swapchain. It never queries
++`State.currentRealSwapchain`: that is the hidden D3D11 bridge swapchain here.
++All COM references are released before the call returns.
++
++`clientPresents` counts successful, non-TEST calls at the outer FG swapchain.
++`nativePresentCalls` accumulates native DXGI `GetLastPresentCount` deltas.
++`displayedFrames` is the fixed ABI field name for accumulated DXGI
++`GetFrameStatistics().PresentCount` deltas. That field is **not a count of panel
++scanouts or proof of unique visible frames**. It should be labelled
++`DXGIstatsCounter` in diagnostics. Present-call throughput, reported display
++statistics, and the requested multiplier are separate measurements.
++
++The totals remain monotonic for the DLL lifetime and querying never clears them.
++Compare deltas only when the epoch matches, both relevant validity flags are
++set, and neither endpoint indicates a new baseline. Identity/window/size/format,
++observed FG mode or requested multiplier changes, successful swapchain resizes,
++release, and detected counter discontinuities invalidate the baseline.
++Ordinary uint32 counter rollover is supported. `requestedMultiplier` is
++configuration metadata, not a measured multiplier.
++
++For a stable 5-second interval after warm-up, report:
++
++* `delta(nativePresentCalls) / delta(clientPresents)` as native presentation-call
++  amplification, alongside both integer deltas.
++* `delta(nativePresentCalls) / elapsedQpcSeconds` as native present-call rate.
++* The independent DXGI statistics raw values, validity/HRESULT, and
++  `lastDisplayQpc`. Do not manufacture a rate when the statistics are unsupported
++  or disjoint. No blocking DwmFlush is issued to force their availability.
++
++Check a 1x baseline and then requested 2x, 3x, and 4x separately. Generated-frame
++pacing is asynchronous, so boundary effects can shift a short window by a few
++frames. Corroborate with ETW/PresentMon when claiming observed output throughput.
++Window occlusion, focus, refresh-rate limits and compositor drops can affect
++display results; API calls alone do not prove what the panel scanned out.
++
++Primary API documentation:
++
++* https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getlastpresentcount
++* https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getframestatistics
++* https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_frame_statistics
++* https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuide.md#53-detecting-sl-proxies
++
++The original late-HUDless ABI1 is unchanged. Build this variant with
++`Build-Local.ps1 -BuildDirectoryName local-build-presentation`; it does not replace
++the prior local build, the stage, or the installed game backend.

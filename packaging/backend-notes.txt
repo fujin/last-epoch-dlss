@@ -1,0 +1,86 @@
+Historical backend-source research; current status is in README.txt and backend-plan.json.
+Later offline tests verified native 1600x900 DLAA, 2x/3x/4x DXGI call ratios and actual NR evaluation. Native 5120x1440 later suffered a menu/device hang. These later observations supersede the original research-only limitations below.
+
+Pinned NVIDIA frame-generation backend for Last Epoch
+=====================================================
+
+Use Skynizz/optiscaler-dlss5 v1.2.1 (commit 6bfc4389c25054ef6747df6e6b1b470e9541c4da), with Streamline 2.14.1 and NVIDIA DLSS 310.9.1. The exact URLs, SHA256 values and archive-member mappings are in backend-plan.json. These pins come from the vendored Big Beautiful Walk lockfile. The OptiScaler binary asset hash was additionally matched against GitHub release metadata. Downloaded files must still be hashed locally before use. No backend binary was downloaded or installed during this research.
+
+This backend supports a D3D11 game feeding DLSS/FG through D3D12 shared resources. It is not a direct NVIDIA Streamline D3D11 integration: OptiScaler creates/uses the D3D12 device, copies/shares the Unity resources and presents through its FG swapchain. The shared-input code forwards depth, velocity, jitter and camera values into the same DLSSG_Dx12 provider used by D3D12 inputs. Its D3D11 swapchain wrapper forwards Present to the FG swapchain. No source-side 2x-only condition was found on that route.
+
+Multiplier configuration
+------------------------
+[DLSSG] InterpolationCount=1, 2 or 3 requests 2x, 3x or 4x total output, respectively. This value counts GENERATED frames per rendered frame. It is assigned to sl::DLSSGOptions.numFramesToGenerate. The provider clamps the request to DLSSGState.numFramesToGenerateMax. Config.cpp accepts 1 through 6, but this project should expose only the requested 2x through 4x range. Do not use OverrideInterpolationCount: that setting is for overriding another game's existing Streamline calls. Use ForceDMFG=false for a fixed multiplier.
+
+Keep [FrameGen] FGInput=Upscaler, FGOutput=DLSSG and FGNvngxReplacement=None. Use [Upscalers] Dx11Upscaler=dlss_12 so the SR backend uses the D3D12 interop path. Keep [fakenvapi] ForceXeLL=false. The DLSSG provider enables its own Streamline Reflex path and loads the PCL plugin. InitialConfiguration intentionally has FrameGen.Enabled=false until input capture is validated.
+
+Minimal DLL layout, relative to the game executable
+---------------------------------------------------
+version.dll                                  OptiScaler.dll renamed
+nvngx_dlss.dll                                NVIDIA DLSS SR runtime
+OptiScaler/streamline/sl.interposer.dll
+OptiScaler/streamline/sl.common.dll
+OptiScaler/streamline/sl.dlss_g.dll
+OptiScaler/streamline/sl.reflex.dll
+OptiScaler/streamline/sl.pcl.dll
+OptiScaler/streamline/nvngx_dlssg.dll
+
+Keep the supplied vendor licenses alongside these files. OptiScaler itself is GPL-3.0 and its corresponding source is pinned in backend-plan.json. The bridge-derived code has its own Apache-2.0 provenance; vendor DLLs retain their separate licenses. The OptiScaler package's nvngx.dll_dlssnr.dll is a neural-rendering-only forwarder and is not required when DlssNr.Enabled=false. The NVIDIA NR model is also unnecessary for FG. FSR/XeSS provider DLLs are unnecessary for this NVIDIA-only selection.
+
+Streamline_Proxy hardcodes the streamline directory beneath [Libraries] OptiDllPath. Set OptiDllPath=OptiScaler; the loader resolves relative paths against the executable directory. The directory must already exist. OptiScaler's version.dll must be loaded early enough to intercept device/swapchain construction. BepInEx should use its separate winhttp.dll bootstrap, avoiding proxy filename conflict.
+
+Evidence and limits
+--------------------
+Source supports the requested path and multiplier settings. Big Beautiful Walk documents successful D3D11 NVIDIA 2x testing on an RTX 4090; it explicitly does not yet claim validated multi-frame generation. That evidence does not establish Last Epoch compatibility. RTX 5080 3x and 4x must be tested on this installation. Do not report MFG as working solely because configuration accepted it or the game-render FPS counter changed.
+
+Require a valid DLSSG runtime status, supported frame count and measured displayed-frame behavior. Watch OptiScaler/Streamline logs for missing depth/velocity, shared-resource cache failures, interpolation-count clamping and Reflex errors. Exercise map loading, resizing and Alt-Tab after baseline movement/combat verification. Preserve the source dependency set and logs so a backend failure can be separated from Unity capture failures.
+
+Source locations:
+- Config.cpp lines 197-211: DLSSG INI parsing.
+- DLSSG_Dx12.cpp lines 254-304: required depth/MV, runtime max clamp, numFramesToGenerate, fixed/dynamic mode and Reflex.
+- inputs/FG/Upscaler_Inputs_Dx11wDx12.cpp: D3D11 shared resources and FG input capture.
+- with_dx12/dx11_with_dx12_sc.cpp lines 358-425: D3D11 present forwarding.
+- proxies/Streamline_Proxy.h: runtime filenames, D3D12 initialization and required DLSSG/Reflex/PCL features.
+- dllmain.cpp lines 1477-1496: OptiDllPath defaults and path resolution.
+Full source links are in backend-plan.json.
+
+Optional official DLSS 5 Neural Rendering (310.9.16)
+--------------------------------------------------
+An optional source is now verified: NVIDIA's RTX Remix 1.6.1 x64 release archive,
+557,087,446 bytes, SHA256
+7DD1D44492A609050E44B0E3581CEC31135D1ED88B4A91123B4FAAE91955716A.
+Its actual ZIP member is nvngx_dlssnr.dll at the root. The public CRC manifest
+uses runtime/nvngx_dlssnr.dll, but that is NOT the ZIP member path.
+The extracted model is 266,424,944 bytes, version 310.9.16.0, SHA256
+2BC19BC09A7B89DD44F73E2AC0108FCC586E2154BDD0830F242F4F040E28789F.
+Local inspection returned Authenticode Valid with NVIDIA Corporation as signer.
+The model was not loaded or executed during inspection. This is the original
+RTX 50-series runtime, not the unsigned community compatibility rebuild.
+
+Fetch-NeuralRendering.ps1 optionally stages that exact model, the 114,176-byte
+forwarder already present in OptiScaler 1.2.1, and both license files from the
+official NVIDIA archive. The forwarder's SHA256 is
+87408102BC7B6A740C2F771DEB131A606424DF08165D4B9AB34C2742C2A42EA0.
+The NVIDIA RTX SDK/DLSS/NGX terms are in ThirdPartyLicenses-dxvk.txt; the archive's
+top-level MIT LICENSE.txt applies separately to Remix project code and does not
+relicense the NVIDIA model. All names and hashes are pinned under the plan's
+OptionalNeuralRendering property. The optional script verifies the model's
+Authenticode signature, exact member hashes and sizes before staging.
+
+The existing pinned OptiScaler NR path consumes scene color/output, depth and
+motion vectors plus scale, depth-inversion, reset and subrect metadata. It runs
+through the dlss_12 D3D11/D3D12 route. Material, albedo and normal buffers are
+not required by that pass. NVIDIA's official Remix implementation additionally
+exposes an artistic control-mask input; the pinned fork does not provide that
+control. Last Epoch's capture must occur before UI so NR does not alter text.
+
+DLSS 5 NR generates appearance detail; it is separate from DLSS 4.5-era Super
+Resolution and Multi Frame Generation. Official provenance is established,
+but compatibility of this native 310.9.16 model with the pinned unofficial
+OptiScaler path in Last Epoch remains untested. The October NVIDIA update's
+roughly 2x claim concerns model execution cost, not total game frame rate.
+RTX Remix 1.6.1 lists driver 616.92 as its baseline; query NR feature support
+and driver requirements on the actual installation before enabling it.
+
+The optional fetch script never edits OptiScaler.ini and requires NR disabled.
+It does not deploy into the game. Enablement and runtime validation are separate.

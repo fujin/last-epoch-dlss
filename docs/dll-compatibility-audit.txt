@@ -1,0 +1,139 @@
+LAST EPOCH DLL COMPATIBILITY AND RUNTIME AUDIT
+Updated 31 October 2026, Pacific/Auckland
+
+The historical live module inventory for test PID 27580 is loaded-dll-audit.json.
+It records actual paths, file/product versions and SHA256 hashes. It is not a
+new inventory of the later normal managed build or the native-display test now
+in progress. Later feature success is evidenced by the separate logs below.
+
+VERIFIED COMPONENT SET
+
+Unity player: 6000.4.8f1, matching the installed game.
+BepInEx: 6.0.0-be.791+b782da4, with the documented generated-interop repair.
+OptiScaler: local GPL-3.0 modification of DLSS5 fork 1.2.1 / 6bfc4389.
+  version.dll SHA256:
+  B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7
+DLSS Super Resolution: 310.9.1.0.
+  SHA256 3975567B8943C53ACCE397F2B72380092F84F162D00B0D2C7D08A1025C563983
+DLSS Frame Generation model: 310.9.1.0.
+  SHA256 FF6E90EB78B827927DFF5B4ECC6B1C870C2E9BCA29ED9F48C7D348CC9E170B82
+Streamline interposer/common/dlss_g/pcl/reflex: all 2.14.1.0.
+Neural Rendering model: official signed NVIDIA 310.9.16.0 from RTX Remix 1.6.1.
+  SHA256 2BC19BC09A7B89DD44F73E2AC0108FCC586E2154BDD0830F242F4F040E28789F
+NR forwarder from the pinned OptiScaler release:
+  SHA256 87408102BC7B6A740C2F771DEB131A606424DF08165D4B9AB34C2742C2A42EA0
+NVIDIA driver NGX loader: 32.0.16.2101, from the installed driver store.
+The inventory also includes driver-store nvngx_dlssd.dll 310.9.0.0. This adapter
+has not enabled or validated Ray Reconstruction; loading that auxiliary library
+is not evidence of an RR evaluation or an unintended game-local SR replacement.
+
+All selected game-local adapter, backend, SR, FG, Streamline and NR hashes in the
+recorded inventory matched their intended staged files. All six SL/FG payload
+files additionally matched their exact bin/x64 members in the official NVIDIA
+Streamline 2.14.1 archive, whose SHA256 is:
+  92C4D954631A1710DA86CA3FA8D5034F2B9503838C95FC4AE977AE149319781B
+No unintended SR/FG binary version mix was found. There is no 2.14.16 Streamline
+runtime in this selected set; 310.9.16 is the separate NR model version.
+
+API COMPATIBILITY REVIEW
+
+OptiScaler advertises Streamline host SDK 2.11.1 in sl_version.h and passes its
+encoded kSDKVersion to slInit. Its DLSSG, Reflex, PCL and core API headers match
+the official 2.14.1 headers after line-ending normalization. Official Streamline
+accepts a valid encoded host version and uses versioned structures. Reviewed core
+header differences add newer IDs and split an existing reserved 32-bit field;
+the changed UIAlpha enum is unused by this backend. No relevant ABI mismatch was
+found for this D3D11-to-D3D12 SR/FG path. The adapter's frame/diagnostic ABI sizes
+are also checked at startup. These are coherent API expectations, not a blanket
+compatibility guarantee for every game feature or future update.
+
+RUNTIME EVIDENCE BEYOND DLL LOADING
+
+Native 1600x900 DLAA was visible and NVIDIA evaluations succeeded in offline
+play using the DLSSProbe character. The saved validation run is:
+  diagnostics\dlaa-fg234-nr-success-1600\
+
+Independent counters in LogOutput.log measured:
+  Line 1246: 2x request, 300 client presents, 600 underlying DXGI present calls.
+  Line 11535: 3x request, 300 client presents, 900 underlying DXGI present calls.
+  Line 13163: 4x request, 300 client presents, 1200 underlying DXGI present calls.
+These are presentation-throughput ratios, not physical panel scanouts. Diagnostic
+GPU readbacks were enabled; this run is not a final performance benchmark.
+
+NR was disabled in the older PID 27580 inventory, but later actually evaluated:
+  OptiScaler.log line 8064, 10:37:06.224453:
+  DLSS-NR composition ... model 1600x900, debug view 0, compare 0.
+That composition log is inside the successful-model-evaluation path, unlike a
+model DLL-load or feature-create message. The same scene was visually compared
+with NR on/off. Logged NR pass cost was approximately 3 ms in that test scene;
+this is not a native-ultrawide performance prediction. The separate NR patch
+version does not by itself imply incompatibility, and there is now actual
+successful evaluation evidence for this particular signed model/forwarder pair.
+
+The complete corresponding Unity log:
+  diagnostics\Player-D3D11-20261030-212935-665.log
+passed Test-RenderLog.ps1 -RequireClean with RenderTargetErrors=0 and
+ColorDepthMismatches=0. Late HUDless acceptance is NOT verified in DLAA: the saved
+run has accepted=0 and rejected=0 throughout. For example, the sample with
+capturedFrameTokens=89019 still has accepted=0. The final destination was a
+full-resolution TempBuffer75 and the capture eligibility check was false.
+Captured tokens must not be confused with accepted HUDless images. Final-camera
+capture is under repair, and verified HUD separation or artifact-free UI is not
+claimed. The independent FG ratios and actual NR evaluation remain proven.
+
+REMAINING LIMITS
+
+Reduced-resolution Quality/Balanced/Performance are still broken: experimental
+runs paired incompatible PP temporary color/depth sizes and showed white output.
+Successful DLSS evaluation did not make that output correct. Normal managed build
+6BEFF32D726B088F886221AF86CFF4C94F4895A33E697DC1AFCDADB20BDB2579 now rejects scaled
+modes without installing graphics hooks. Keep those experiments isolated.
+
+The user target is native 5120x1440 BORDERLESS, not the old 3840x2160 exclusive
+setting. A clean restart resolved startup UI clipping, and foreground return
+worked. The uncapped Ultra + DLAA + 4x FG + NR WorkingScale=0.5 world test observed
+about 49.2 rendered fps, 197 DXGI presentation calls/second and 98% GPU use. The
+0.5 value is the model working scale, not effect intensity. These observations
+are provisional and are not physical panel FPS or a final benchmark.
+
+NATIVE-MODE STABILITY FAILURE
+
+Evidence folder: diagnostics\native-5120-menu-device-hung\
+Unity log: diagnostics\Player-D3D11-20261030-220301-568.log
+OptiScaler menu opened at 11:09:06.684438; first device-removed reason was
+DXGI_ERROR_DEVICE_HUNG at 11:09:15.840852 (OptiScaler.log line 5089).
+Whole-file validation: RenderTargetErrors=0, ColorDepthMismatches=0,
+PlayerDeviceErrors=0, BackendDeviceErrors=753, Passed=false. Clean Unity target
+dimensions therefore did not imply a healthy rendering device.
+
+Normal close of hung PID 35412 timed out; only that test process was then forcibly
+closed. An overlay fence/resource-lifetime backend fix and the separate correct
+DLAA final-camera HUDless capture are being prepared. Neither is deployed at
+this handoff. Native performance/stability validation is NOT complete; retest
+the menu, Alt-Tab, transitions, UI and sustained play after those changes.
+
+Test-RenderLog.ps1 now accepts -BackendLogPath and checks device loss in both
+logs. It rejects the real native-mode failure and passes the saved 1600x900 run:
+
+  .\scripts\Test-RenderLog.ps1 -PlayerLogPath '.\diagnostics\Player-D3D11-20261030-212935-665.log' -BackendLogPath '.\diagnostics\dlaa-fg234-nr-success-1600\OptiScaler.log' -RequireClean
+
+Expected failure (-RequireClean throws):
+
+  .\scripts\Test-RenderLog.ps1 -PlayerLogPath '.\diagnostics\Player-D3D11-20261030-220301-568.log' -BackendLogPath '.\diagnostics\native-5120-menu-device-hung\OptiScaler.log' -RequireClean
+
+Only offline DLSSProbe sessions have been tested; online
+play is unverified. Insert opens OptiScaler; F10 toggles the diagnostic panel,
+which starts hidden in normal build 6BEF. F8/F9 are game keys, not mod controls.
+
+PROVENANCE REFERENCES
+
+packaging\backend-plan.json contains exact download URLs, versions and hashes.
+https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1
+https://github.com/NVIDIAGameWorks/rtx-remix/releases/tag/remix-1.6.1
+https://github.com/Skynizz/optiscaler-dlss5/releases/tag/v1.2.1
+
+To restore the tracked installation, close the game and run:
+  .\scripts\Restore.ps1 -WhatIf
+  .\scripts\Restore.ps1
+Keep diagnostics\deployment-manifest.json and its original backups. Restoration
+checks file hashes and refuses unrecognized changes rather than overwriting them.

@@ -1,0 +1,752 @@
+diff --git a/OptiScaler/include/imgui/imgui_impl_dx12.cpp b/OptiScaler/include/imgui/imgui_impl_dx12.cpp
+index 2d28923..b3512b4 100644
+--- a/OptiScaler/include/imgui/imgui_impl_dx12.cpp
++++ b/OptiScaler/include/imgui/imgui_impl_dx12.cpp
+@@ -59,6 +59,9 @@
+ #include <d3d12.h>
+ #include <dxgi1_4.h>
+ #include <d3dcompiler.h>
++#include <mutex>
++#include <memory>
++#include <wrl/client.h>
+ #ifdef _MSC_VER
+ #pragma comment(lib, "d3dcompiler") // Automatically link with d3dcompiler.lib as we are using D3DCompile() below.
+ #endif
+@@ -66,6 +69,23 @@
+ // DirectX12 data
+ struct ImGui_ImplDX12_RenderBuffers;
+ 
++// Local OptiScaler variant: retain uploads until a checked fence completes.
++// A timeout skips menu drawing; it must not free command/upload memory still
++// referenced by the GPU. No ImGui/texture pointer is kept in retired records.
++struct ImGui_ImplDX12_PendingUpload
++{
++    ID3D12Device* Device = nullptr;
++    ID3D12CommandQueue* Queue = nullptr;
++    ID3D12Resource* Texture = nullptr;
++    ID3D12Resource* Upload = nullptr;
++    ID3D12CommandAllocator* Allocator = nullptr;
++    ID3D12GraphicsCommandList* List = nullptr;
++    ID3D12Fence* Fence = nullptr;
++    HANDLE Event = nullptr;
++    bool Signaled = false;
++    ImGui_ImplDX12_PendingUpload* Next = nullptr;
++};
++
+ struct ImGui_ImplDX12_Texture
+ {
+     ID3D12Resource*             pTextureResource;
+@@ -89,10 +109,88 @@ struct ImGui_ImplDX12_Data
+     UINT                        numFramesInFlight;
+     ImGui_ImplDX12_Texture      FontTexture;
+     bool                        LegacySingleDescriptorUsed;
++    ImGui_ImplDX12_PendingUpload* PendingUploads;
++    bool                        UploadDeviceLost;
+ 
+     ImGui_ImplDX12_Data()       { memset((void*)this, 0, sizeof(*this)); }
+ };
+ 
++static std::mutex g_retiredUploadMutex;
++static ImGui_ImplDX12_PendingUpload* g_retiredUploads = nullptr;
++
++static bool ImGui_ImplDX12_UploadCompleted(ImGui_ImplDX12_PendingUpload* upload, DWORD timeout_ms, bool& device_lost)
++{
++    const ULONGLONG started = GetTickCount64();
++    for (;;)
++    {
++        const UINT64 completed = upload->Fence->GetCompletedValue();
++        if (completed == UINT64_MAX || FAILED(upload->Device->GetDeviceRemovedReason()))
++        {
++            device_lost = true;
++            return true;
++        }
++        if (!upload->Signaled)
++            upload->Signaled = SUCCEEDED(upload->Queue->Signal(upload->Fence, 1));
++        if (upload->Signaled && completed >= 1)
++            return true;
++        const ULONGLONG elapsed = GetTickCount64() - started;
++        if (!upload->Signaled || elapsed >= timeout_ms)
++            return false;
++        if (FAILED(upload->Fence->SetEventOnCompletion(1, upload->Event)))
++            return false;
++        const DWORD remaining = static_cast<DWORD>(timeout_ms - elapsed);
++        if (WaitForSingleObject(upload->Event, remaining < 10 ? remaining : 10) == WAIT_FAILED)
++            return false;
++    }
++}
++
++static void ImGui_ImplDX12_ReleaseUpload(ImGui_ImplDX12_PendingUpload* upload)
++{
++    upload->List->Release();
++    upload->Allocator->Release();
++    upload->Upload->Release();
++    upload->Texture->Release();
++    upload->Fence->Release();
++    CloseHandle(upload->Event);
++    upload->Queue->Release();
++    upload->Device->Release();
++    delete upload;
++}
++
++static bool ImGui_ImplDX12_FinishUploads(ImGui_ImplDX12_Data* bd, DWORD timeout_ms)
++{
++    if (FAILED(bd->pd3dDevice->GetDeviceRemovedReason()))
++        bd->UploadDeviceLost = true;
++    auto** link = &bd->PendingUploads;
++    while (*link)
++    {
++        auto* upload = *link;
++        if (!ImGui_ImplDX12_UploadCompleted(upload, timeout_ms, bd->UploadDeviceLost))
++            return false;
++        *link = upload->Next;
++        ImGui_ImplDX12_ReleaseUpload(upload);
++    }
++    return !bd->UploadDeviceLost;
++}
++
++static void ImGui_ImplDX12_CollectRetiredUploads()
++{
++    const std::lock_guard<std::mutex> lock(g_retiredUploadMutex);
++    auto** link = &g_retiredUploads;
++    while (*link)
++    {
++        auto* upload = *link;
++        bool device_lost = false;
++        if (!ImGui_ImplDX12_UploadCompleted(upload, 0, device_lost))
++        {
++            link = &upload->Next;
++            continue;
++        }
++        *link = upload->Next;
++        ImGui_ImplDX12_ReleaseUpload(upload);
++    }
++}
++
+ // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
+ // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
+ static ImGui_ImplDX12_Data* ImGui_ImplDX12_GetBackendData()
+@@ -261,15 +359,25 @@ void ImGui_ImplDX12_RenderDrawData(ImDrawData* draw_data, ID3D12GraphicsCommandL
+     if (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f)
+         return;
+ 
++    ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
++    ImGui_ImplDX12_CollectRetiredUploads();
++    if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++        return;
++
+     // Catch up with texture updates. Most of the times, the list will have 1 element with an OK status, aka nothing to do.
+     // (This almost always points to ImGui::GetPlatformIO().Textures[] but is part of ImDrawData to allow overriding or disabling texture updates).
+     if (draw_data->Textures != nullptr)
+         for (ImTextureData* tex : *draw_data->Textures)
++        {
+             if (tex->Status != ImTextureStatus_OK)
+                 ImGui_ImplDX12_UpdateTexture(tex);
++            if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++                return;
++            if (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates)
++                return; // Allocation/map/recording failure: never sample an uninitialized texture.
++        }
+ 
+     // FIXME: We are assuming that this only gets called once per frame!
+-    ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
+     ImGui_ImplDX12_ViewportData* vd = (ImGui_ImplDX12_ViewportData*)draw_data->OwnerViewport->RendererUserData;
+     vd->FrameIndex++;
+     ImGui_ImplDX12_RenderBuffers* fr = &vd->FrameRenderBuffers[vd->FrameIndex % bd->numFramesInFlight];
+@@ -423,9 +531,11 @@ static void ImGui_ImplDX12_DestroyTexture(ImTextureData* tex)
+ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+ {
+     ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
+-    bool need_barrier_before_copy = true; // Do we need a resource barrier before we copy new data in?
++    if (!ImGui_ImplDX12_FinishUploads(bd, 0))
++        return;
++    bool need_barrier_before_copy = tex->Status != ImTextureStatus_WantCreate;
+ 
+-    if (tex->Status == ImTextureStatus_WantCreate)
++    if (tex->Status == ImTextureStatus_WantCreate && tex->BackendUserData == nullptr)
+     {
+         // Create and upload new texture to graphics system
+         //IMGUI_DEBUG_LOG("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height);
+@@ -454,8 +564,14 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+ 
+         ID3D12Resource* pTexture = nullptr;
+-        bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
++        const HRESULT texture_result = bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
+             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pTexture));
++        if (FAILED(texture_result))
++        {
++            bd->InitInfo.SrvDescriptorFreeFn(&bd->InitInfo, backend_tex->hFontSrvCpuDescHandle, backend_tex->hFontSrvGpuDescHandle);
++            IM_DELETE(backend_tex);
++            return;
++        }
+ 
+         // Create SRV
+         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+@@ -517,34 +633,40 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+ 
+         // FIXME-OPT: Can upload buffer be reused?
+-        ID3D12Resource* uploadBuffer = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer;
+         HRESULT hr = bd->pd3dDevice->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
+             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         // Create temporary command list and execute immediately
+-        ID3D12Fence* fence = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+         hr = bd->pd3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+-        HANDLE event = ::CreateEvent(0, 0, 0, 0);
+-        IM_ASSERT(event != nullptr);
++        std::unique_ptr<void, decltype(&CloseHandle)> event(::CreateEvent(0, 0, 0, 0), &CloseHandle);
++        if (!event)
++            return;
+ 
+         // FIXME-OPT: Create once and reuse?
+-        ID3D12CommandAllocator* cmdAlloc = nullptr;
++        Microsoft::WRL::ComPtr<ID3D12CommandAllocator> cmdAlloc;
+         hr = bd->pd3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cmdAlloc));
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         // FIXME-OPT: Can be use the one from user? (pass ID3D12GraphicsCommandList* to ImGui_ImplDX12_UpdateTextures)
+-        ID3D12GraphicsCommandList* cmdList = nullptr;
+-        hr = bd->pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc, nullptr, IID_PPV_ARGS(&cmdList));
+-        IM_ASSERT(SUCCEEDED(hr));
++        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList;
++        hr = bd->pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cmdAlloc.Get(), nullptr, IID_PPV_ARGS(&cmdList));
++        if (FAILED(hr))
++            return;
+ 
+         // Copy to upload buffer
+         void* mapped = nullptr;
+         D3D12_RANGE range = { 0, upload_size };
+         hr = uploadBuffer->Map(0, &range, &mapped);
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+         for (int y = 0; y < upload_h; y++)
+             memcpy((void*)((uintptr_t)mapped + y * upload_pitch_dst), tex->GetPixelsAt(upload_x, upload_y + y), upload_pitch_src);
+         uploadBuffer->Unmap(0, &range);
+@@ -564,7 +686,7 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+         D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+         {
+-            srcLocation.pResource = uploadBuffer;
++            srcLocation.pResource = uploadBuffer.Get();
+             srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+             srcLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+             srcLocation.PlacedFootprint.Footprint.Width = upload_w;
+@@ -589,26 +711,31 @@ void ImGui_ImplDX12_UpdateTexture(ImTextureData* tex)
+         }
+ 
+         hr = cmdList->Close();
+-        IM_ASSERT(SUCCEEDED(hr));
++        if (FAILED(hr))
++            return;
+ 
+         ID3D12CommandQueue* cmdQueue = bd->pCommandQueue;
+-        cmdQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&cmdList);
+-        hr = cmdQueue->Signal(fence, 1);
+-        IM_ASSERT(SUCCEEDED(hr));
+-
+-        // FIXME-OPT: Suboptimal?
+-        // - To remove this may need to create NumFramesInFlight x ImGui_ImplDX12_FrameContext in backend data (mimick docking version)
+-        // - Store per-frame in flight: upload buffer?
+-        // - Where do cmdList and cmdAlloc fit?
+-        fence->SetEventOnCompletion(1, event);
+-        ::WaitForSingleObject(event, INFINITE);
+-
+-        cmdList->Release();
+-        cmdAlloc->Release();
+-        ::CloseHandle(event);
+-        fence->Release();
+-        uploadBuffer->Release();
++        auto* pending = new ImGui_ImplDX12_PendingUpload;
++        pending->Device = bd->pd3dDevice;
++        pending->Device->AddRef();
++        pending->Queue = cmdQueue;
++        pending->Queue->AddRef();
++        pending->Texture = backend_tex->pTextureResource;
++        pending->Texture->AddRef();
++        pending->Upload = uploadBuffer.Detach();
++        pending->Allocator = cmdAlloc.Detach();
++        pending->List = cmdList.Detach();
++        pending->Fence = fence.Detach();
++        pending->Event = event.release();
++        pending->Next = bd->PendingUploads;
++        bd->PendingUploads = pending;
++        ID3D12CommandList* lists[] = { pending->List };
++        cmdQueue->ExecuteCommandLists(1, lists);
++        pending->Signaled = SUCCEEDED(cmdQueue->Signal(pending->Fence, 1));
++        // Future texture updates retain their own status while this upload is
++        // pending. RenderDrawData checks the fence before sampling the texture.
+         tex->SetStatus(ImTextureStatus_OK);
++        ImGui_ImplDX12_FinishUploads(bd, 50);
+     }
+ 
+     if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= (int)bd->numFramesInFlight)
+@@ -967,6 +1094,21 @@ void ImGui_ImplDX12_Shutdown(bool shutdown_platform, bool invalidate)
+     IM_ASSERT(bd != nullptr && "No renderer backend to shutdown, or already shutdown?");
+     ImGuiIO& io = ImGui::GetIO();
+ 
++    // Keep ordinary-timeout uploads alive across context destruction. Retired
++    // records own only COM resources, so no destroyed ImGui object is touched.
++    ImGui_ImplDX12_FinishUploads(bd, 50);
++    if (bd->PendingUploads)
++    {
++        const std::lock_guard<std::mutex> lock(g_retiredUploadMutex);
++        auto* last = bd->PendingUploads;
++        while (last->Next)
++            last = last->Next;
++        last->Next = g_retiredUploads;
++        g_retiredUploads = bd->PendingUploads;
++        bd->PendingUploads = nullptr;
++    }
++    ImGui_ImplDX12_CollectRetiredUploads();
++
+     // Manually delete main viewport render resources in-case we haven't initialized for viewports
+     ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+     if (ImGui_ImplDX12_ViewportData* vd = (ImGui_ImplDX12_ViewportData*)main_viewport->RendererUserData)
+diff --git a/OptiScaler/menu/menu_overlay_dx.cpp b/OptiScaler/menu/menu_overlay_dx.cpp
+index 30f6b7d..39bf46f 100644
+--- a/OptiScaler/menu/menu_overlay_dx.cpp
++++ b/OptiScaler/menu/menu_overlay_dx.cpp
+@@ -5,6 +5,9 @@
+ #include <Util.h>
+ #include <Logger.h>
+ #include <Config.h>
++#include <atomic>
++#include <mutex>
++#include <wrl/client.h>
+ 
+ #include <imgui/imgui_impl_dx11.h>
+ #include <imgui/imgui_impl_dx12.h>
+@@ -35,6 +38,68 @@ static D3D12_CPU_DESCRIPTOR_HANDLE g_mainRenderTargetDescriptor[NUM_BACK_BUFFERS
+ // current command queue for dx12 swapchain
+ static IUnknown* currentSCCommandQueue = nullptr;
+ 
++// Local variant: serialize CPU lifetime changes and explicitly retire GPU work.
++// Present uses try_lock so a resize never waits for another Present to enter.
++// Fence waits refer only to a Signal already submitted while holding this lock;
++// no future submission/FG callback is required to make that fence complete.
++static std::mutex g_overlayMutex;
++static std::atomic<ID3D12GraphicsCommandList*> g_trackedMenuCommandList { nullptr };
++static Microsoft::WRL::ComPtr<ID3D12Device> g_ownedDevice;
++static Microsoft::WRL::ComPtr<ID3D12CommandQueue> g_ownedQueue;
++static Microsoft::WRL::ComPtr<IUnknown> g_swapchainIdentity;
++static Microsoft::WRL::ComPtr<ID3D12Fence> g_overlayFence;
++static DXGI_SWAP_CHAIN_DESC g_overlayDesc {};
++static HANDLE g_overlayFenceEvent = nullptr;
++static UINT64 g_overlayFenceValue = 0;
++static UINT64 g_lastOverlaySubmission = 0;
++static bool g_unfencedOverlaySubmission = false;
++static bool g_overlayWaitWarning = false;
++
++enum class OverlayGpuStatus { Complete, Pending, DeviceLost };
++
++static OverlayGpuStatus WaitForOverlayGpu(DWORD timeoutMs)
++{
++    if (g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason()))
++        return OverlayGpuStatus::DeviceLost;
++    if (!g_overlayFence)
++        return g_unfencedOverlaySubmission ? OverlayGpuStatus::Pending : OverlayGpuStatus::Complete;
++
++    // A failed Signal must never make submitted command memory look reusable.
++    // Retry on the same owned queue; otherwise retain every resource.
++    if (g_unfencedOverlaySubmission)
++    {
++        const UINT64 value = ++g_overlayFenceValue;
++        if (!g_ownedQueue || FAILED(g_ownedQueue->Signal(g_overlayFence.Get(), value)))
++            return g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason())
++                       ? OverlayGpuStatus::DeviceLost : OverlayGpuStatus::Pending;
++        g_lastOverlaySubmission = value;
++        g_unfencedOverlaySubmission = false;
++    }
++
++    const ULONGLONG start = GetTickCount64();
++    for (;;)
++    {
++        const UINT64 completed = g_overlayFence->GetCompletedValue();
++        if (completed == UINT64_MAX || (g_ownedDevice && FAILED(g_ownedDevice->GetDeviceRemovedReason())))
++            return OverlayGpuStatus::DeviceLost;
++        if (completed >= g_lastOverlaySubmission)
++        {
++            g_overlayWaitWarning = false;
++            return OverlayGpuStatus::Complete;
++        }
++        const ULONGLONG elapsed = GetTickCount64() - start;
++        if (elapsed >= timeoutMs || !g_overlayFenceEvent)
++            return OverlayGpuStatus::Pending;
++        // Register once per short wait, then recheck the fence: an event may
++        // also be signalled by an earlier timed-out registration.
++        if (FAILED(g_overlayFence->SetEventOnCompletion(g_lastOverlaySubmission, g_overlayFenceEvent)))
++            return OverlayGpuStatus::Pending;
++        const DWORD slice = static_cast<DWORD>((std::min)(ULONGLONG(10), ULONGLONG(timeoutMs) - elapsed));
++        if (WaitForSingleObject(g_overlayFenceEvent, slice) == WAIT_FAILED)
++            return OverlayGpuStatus::Pending;
++    }
++}
++
+ // status
+ static bool _isInited = false;
+ static bool _d3d12Captured = false;
+@@ -76,7 +141,7 @@ static int GetCorrectDXGIFormat(int eCurrentFormat)
+     return eCurrentFormat;
+ }
+ 
+-static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapChain)
++static bool CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapChain)
+ {
+     LOG_FUNC();
+ 
+@@ -86,7 +151,13 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+     if (hr != S_OK)
+     {
+         LOG_ERROR("pSwapChain->GetDesc: {0:X}", (unsigned long) hr);
+-        return;
++        return false;
++    }
++
++    if (sd.BufferCount == 0 || sd.BufferCount > NUM_BACK_BUFFERS)
++    {
++        LOG_ERROR("Overlay unsupported swapchain buffer count: {}", sd.BufferCount);
++        return false;
+     }
+ 
+     for (UINT i = 0; i < sd.BufferCount; ++i)
+@@ -97,7 +168,9 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+         if (result != S_OK)
+         {
+             LOG_ERROR("pSwapChain->GetBuffer: {:X}", (unsigned long) result);
+-            return;
++            for (UINT j = 0; j < i; ++j)
++                SAFE_RELEASE(g_mainRenderTargetResource[j]);
++            return false;
+         }
+ 
+         if (pBackBuffer != nullptr)
+@@ -112,12 +185,20 @@ static void CreateRenderTargetDx12(ID3D12Device* device, IDXGISwapChain* pSwapCh
+     }
+ 
+     LOG_INFO("done!");
++    return true;
+ }
+ 
+-static void CleanupRenderTargetDx12(bool clearQueue)
++static bool CleanupRenderTargetDx12(bool clearQueue)
+ {
+-    if (!_isInited || !_dx12Device || State::Instance().isShuttingDown)
+-        return;
++    // Partial initialization also owns resources. Never infer GPU completion
++    // from a CPU flag or release in-flight memory after an ordinary timeout.
++    if (WaitForOverlayGpu(250) == OverlayGpuStatus::Pending)
++    {
++        if (!g_overlayWaitWarning)
++            LOG_WARN("Overlay GPU drain timed out; retaining resources and skipping reinitialization");
++        g_overlayWaitWarning = true;
++        return false;
++    }
+ 
+     for (UINT i = 0; i < NUM_BACK_BUFFERS; ++i)
+     {
+@@ -144,17 +225,29 @@ static void CleanupRenderTargetDx12(bool clearQueue)
+         }
+ 
+         SAFE_RELEASE(g_pd3dCommandList);
++        g_trackedMenuCommandList.store(nullptr, std::memory_order_release);
+ 
+         if (g_pd3dCommandQueue != nullptr)
+             g_pd3dCommandQueue = nullptr;
+ 
+         g_pd3dSrvDescHeapAlloc.Destroy();
+-
+-        // SAFE_RELEASE(g_pd3dDeviceParam);
++        g_overlayFence.Reset();
++        if (g_overlayFenceEvent)
++            CloseHandle(g_overlayFenceEvent);
++        g_overlayFenceEvent = nullptr;
++        g_overlayFenceValue = g_lastOverlaySubmission = 0;
++        g_unfencedOverlaySubmission = false;
++        g_ownedQueue.Reset();
++        g_ownedDevice.Reset();
++        g_swapchainIdentity.Reset();
++        g_overlayDesc = {};
++        currentSCCommandQueue = nullptr;
++        g_pd3dDeviceParam = nullptr;
+ 
+         _dx12Device = false;
+         _isInited = false;
+     }
++    return true;
+ }
+ 
+ static void CreateRenderTargetDx11(IDXGISwapChain* pSwapChain)
+@@ -292,6 +385,20 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+     // Get device from swapchain
+     ID3D12Device* device = g_pd3dDeviceParam;
+ 
++    // Conservatively retire the previous overlay submission before ImGui can
++    // resize/recycle vertex/index buffers or update/free a texture descriptor.
++    // This also protects every backbuffer allocator, not just matching indices.
++    const auto gpuStatus = WaitForOverlayGpu(50);
++    if (gpuStatus != OverlayGpuStatus::Complete)
++    {
++        if (!g_overlayWaitWarning)
++            LOG_WARN("Overlay GPU unavailable ({}); skipping overlay without reusing resources",
++                     gpuStatus == OverlayGpuStatus::DeviceLost ? "device removed" : "fence pending");
++        g_overlayWaitWarning = true;
++        pSwapChain->Release();
++        return;
++    }
++
+     ImGuiIO& io = ImGui::GetIO();
+     (void) io;
+     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+@@ -303,6 +410,16 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+ 
+         HRESULT result;
+ 
++        result = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_overlayFence));
++        g_overlayFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
++        if (FAILED(result) || !g_overlayFenceEvent)
++        {
++            LOG_ERROR("Overlay completion fence initialization failed: {:X}", (UINT) result);
++            CleanupRenderTargetDx12(true);
++            pSwapChain->Release();
++            return;
++        }
++
+         {
+             D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+             desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+@@ -392,6 +509,7 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+             pSwapChain->Release();
+             return;
+         }
++        g_trackedMenuCommandList.store(g_pd3dCommandList, std::memory_order_release);
+ 
+         DXGI_SWAP_CHAIN_DESC scDesc;
+         pSwapChain->GetDesc(&scDesc);
+@@ -410,7 +528,8 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+             [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
+         { return g_pd3dSrvDescHeapAlloc.Free(cpu_handle, gpu_handle); };
+ 
+-        ImGui_ImplDX12_Init(&initInfo);
++        if (!ImGui_ImplDX12_Init(&initInfo))
++            CleanupRenderTargetDx12(true);
+ 
+         pSwapChain->Release();
+         return;
+@@ -421,7 +540,8 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+         // Generate render targets
+         if (!g_mainRenderTargetResource[0])
+         {
+-            CreateRenderTargetDx12(device, pSwapChain);
++            if (!CreateRenderTargetDx12(device, pSwapChain))
++                CleanupRenderTargetDx12(true);
+             pSwapChain->Release();
+             return;
+         }
+@@ -438,6 +558,12 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+                 ImGui::Render();
+ 
+                 UINT backBufferIdx = pSwapChain->GetCurrentBackBufferIndex();
++                if (backBufferIdx >= NUM_BACK_BUFFERS || !g_mainRenderTargetResource[backBufferIdx])
++                {
++                    LOG_ERROR("Overlay invalid swapchain backbuffer index: {}", backBufferIdx);
++                    pSwapChain->Release();
++                    return;
++                }
+                 ID3D12CommandAllocator* commandAllocator = g_commandAllocators[backBufferIdx];
+ 
+                 auto result = commandAllocator->Reset();
+@@ -485,7 +611,17 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+                 }
+ 
+                 ID3D12CommandList* ppCommandLists[] = { g_pd3dCommandList };
+-                ((ID3D12CommandQueue*) currentSCCommandQueue)->ExecuteCommandLists(1, ppCommandLists);
++                g_ownedQueue->ExecuteCommandLists(1, ppCommandLists);
++                g_unfencedOverlaySubmission = true;
++                const UINT64 submission = ++g_overlayFenceValue;
++                result = g_ownedQueue->Signal(g_overlayFence.Get(), submission);
++                if (SUCCEEDED(result))
++                {
++                    g_lastOverlaySubmission = submission;
++                    g_unfencedOverlaySubmission = false;
++                }
++                else
++                    LOG_ERROR("Overlay queue Signal failed: {:X}; retaining submitted resources", (UINT) result);
+             }
+         }
+         else
+@@ -501,7 +637,11 @@ static void RenderImGui_DX12(IDXGISwapChain* pSwapChainPlain)
+     pSwapChain->Release();
+ }
+ 
+-ID3D12GraphicsCommandList* MenuOverlayDx::MenuCommandList() { return g_pd3dCommandList; }
++ID3D12GraphicsCommandList* MenuOverlayDx::MenuCommandList()
++{
++    // Resource-tracking hooks call this while Present holds g_overlayMutex.
++    return g_trackedMenuCommandList.load(std::memory_order_acquire);
++}
+ 
+ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+ {
+@@ -515,6 +655,9 @@ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+         fg->Deactivate();
+     }
+ 
++    // FG deactivation remains outside our mutex: it may wait for Present.
++    const std::lock_guard<std::mutex> lock(g_overlayMutex);
++
+     if (_dx11Device)
+         CleanupRenderTargetDx11(false);
+     else
+@@ -524,6 +667,9 @@ void MenuOverlayDx::CleanupRenderTarget(bool clearQueue, HWND hWnd)
+ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags,
+                             const DXGI_PRESENT_PARAMETERS* pPresentParameters, IUnknown* pDevice, HWND hWnd, bool isUWP)
+ {
++    const std::unique_lock<std::mutex> lock(g_overlayMutex, std::try_to_lock);
++    if (!lock.owns_lock() || !pSwapChain || !pDevice || State::Instance().isShuttingDown)
++        return;
+     if (!Config::Instance()->OverlayMenu.value_or_default())
+     {
+         MenuOverlayBase::Present();
+@@ -532,37 +678,52 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+ 
+     LOG_DEBUG("");
+ 
+-    ID3D12CommandQueue* cq = nullptr;
+-    ID3D11Device* device = nullptr;
+-    ID3D12Device* device12 = nullptr;
++    Microsoft::WRL::ComPtr<ID3D12CommandQueue> cq;
++    Microsoft::WRL::ComPtr<ID3D11Device> device;
++    Microsoft::WRL::ComPtr<ID3D12Device> device12;
++    Microsoft::WRL::ComPtr<IUnknown> identity;
++    DXGI_SWAP_CHAIN_DESC desc {};
++    if (FAILED(pSwapChain->QueryInterface(IID_PPV_ARGS(&identity))) || FAILED(pSwapChain->GetDesc(&desc)))
++        return;
+ 
+     // try to obtain directx objects and find the path
+     if (pDevice->QueryInterface(IID_PPV_ARGS(&device)) == S_OK)
+     {
+-        if (!_dx11Device)
+-            LOG_DEBUG("D3D11Device captured");
+-
+-        _dx11Device = true;
++        // D3D11 state is selected only after retiring any previous D3D12 state.
+     }
+     else if (pDevice->QueryInterface(IID_PPV_ARGS(&cq)) == S_OK)
+     {
+-        if (!_dx12Device)
+-            LOG_DEBUG("D3D12CommandQueue captured");
+-
+-        if (!CheckForRealObject(__FUNCTION__, pDevice, &currentSCCommandQueue))
+-            currentSCCommandQueue = pDevice;
+-
+-        if (((ID3D12CommandQueue*) currentSCCommandQueue)->GetDevice(IID_PPV_ARGS(&device12)) == S_OK)
++        IUnknown* realQueue = nullptr;
++        if (CheckForRealObject(__FUNCTION__, pDevice, &realQueue))
+         {
+-            if (!_dx12Device)
+-                LOG_DEBUG("D3D12Device captured");
+-
+-            _dx12Device = true;
++            Microsoft::WRL::ComPtr<ID3D12CommandQueue> unwrapped;
++            if (SUCCEEDED(realQueue->QueryInterface(IID_PPV_ARGS(&unwrapped))))
++                cq = unwrapped;
+         }
++        if (FAILED(cq->GetDevice(IID_PPV_ARGS(&device12))))
++            return;
++    }
++    else
++        return;
++
++    const bool windowChanged = MenuOverlayBase::Handle() != hWnd;
++    const bool dx12Changed = g_ownedDevice &&
++        (device || g_ownedDevice.Get() != device12.Get() || g_ownedQueue.Get() != cq.Get() ||
++         g_swapchainIdentity.Get() != identity.Get() || windowChanged ||
++         g_overlayDesc.BufferCount != desc.BufferCount || g_overlayDesc.BufferDesc.Width != desc.BufferDesc.Width ||
++         g_overlayDesc.BufferDesc.Height != desc.BufferDesc.Height ||
++         g_overlayDesc.BufferDesc.Format != desc.BufferDesc.Format);
++    if (dx12Changed && !CleanupRenderTargetDx12(true))
++        return;
++    if (_dx11Device && (device12 || windowChanged))
++    {
++        CleanupRenderTargetDx11(false);
++        if (ImGui::GetCurrentContext() && ImGui::GetIO().BackendRendererUserData)
++            ImGui_ImplDX11_Shutdown();
+     }
+ 
+     // Process window handle changed, update base
+-    if (MenuOverlayBase::Handle() != hWnd)
++    if (windowChanged)
+     {
+         LOG_DEBUG("Handle changed {:X} -> {:X}", (size_t) MenuOverlayBase::Handle(), (size_t) hWnd);
+ 
+@@ -577,25 +738,31 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+     // Init
+     if (!_isInited)
+     {
+-        if (_dx11Device)
++        if (device)
+         {
+             CleanupRenderTargetDx11(false);
+ 
+-            g_pd3dDevice = device;
++            g_pd3dDevice = device.Get();
++            _dx11Device = true;
++            _dx12Device = false;
+ 
+             CreateRenderTargetDx11(pSwapChain);
+             MenuOverlayBase::Dx11Ready();
+             _isInited = true;
+         }
+-        else if (_dx12Device && (g_pd3dDeviceParam != nullptr || device12 != nullptr))
++        else if (device12)
+         {
+-            if (g_pd3dDeviceParam != nullptr && device12 == nullptr)
+-                device12 = g_pd3dDeviceParam;
+-
+-            CleanupRenderTargetDx12(true);
+-
+-            g_pd3dCommandQueue = cq;
+-            g_pd3dDeviceParam = device12;
++            if (!CleanupRenderTargetDx12(true))
++                return;
++            g_ownedDevice = device12;
++            g_ownedQueue = cq;
++            g_swapchainIdentity = identity;
++            g_overlayDesc = desc;
++            g_pd3dCommandQueue = cq.Get();
++            currentSCCommandQueue = cq.Get();
++            g_pd3dDeviceParam = device12.Get();
++            _dx11Device = false;
++            _dx12Device = true;
+ 
+             MenuOverlayBase::Dx12Ready();
+             _isInited = true;
+@@ -612,15 +779,6 @@ void MenuOverlayDx::Present(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT
+             RenderImGui_DX12(pSwapChain);
+     }
+ 
+-    // release used objects
+-    if (cq != nullptr)
+-        cq->Release();
+-
+-    if (device != nullptr)
+-        device->Release();
+-
+-    if (device12 != nullptr)
+-        device12->Release();
+ }
+ 
+ void MenuOverlayDx::ApplyThemeStyle() { MenuOverlayBase::ApplyThemeStyle(); }

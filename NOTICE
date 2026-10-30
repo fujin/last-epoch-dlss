@@ -1,0 +1,19 @@
+Last Epoch graphics prototype
+
+This is an experimental third-party integration, not an official Last Epoch,
+NVIDIA, BepInEx or OptiScaler release. See README.txt for tested behavior and
+known failures. This repository contains source and build recipes, not game
+assets, generated game interop, proprietary NVIDIA models or runtime binaries.
+
+Native bridge source adapted from Big Beautiful Walk retains its Apache-2.0
+license and attribution in src/native/LICENSE, NOTICE and UPSTREAM-NOTICE.
+
+Curated modifications to OptiScaler are distributed as GPL-3.0 source patches.
+Each packaging/patches variant retains the original license, source notice and
+manifest. Its pinned base archive plus the complete patch reconstruct the
+corresponding modified backend source. NVIDIA/Streamline components have their
+own licenses and are downloaded separately using the pinned manifests.
+
+No top-level license here supersedes the licenses and copyright notices of
+those components. Original standalone managed/loader/script files retain their
+authors' rights; this notice does not assign them an additional blanket license.

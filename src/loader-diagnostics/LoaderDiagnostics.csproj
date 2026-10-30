@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>LastEpoch.LoaderDiagnostics</AssemblyName>
+    <Version>0.1.0</Version>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <LoaderDir>$(MSBuildThisFileDirectory)..\..\loader\BepInEx\core</LoaderDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(LoaderDir)\BepInEx.Core.dll"><Private>false</Private></Reference>
+    <Reference Include="$(LoaderDir)\BepInEx.Preloader.Core.dll"><Private>false</Private></Reference>
+    <Reference Include="$(LoaderDir)\Mono.Cecil.dll"><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

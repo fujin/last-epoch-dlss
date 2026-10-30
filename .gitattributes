@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# Preserve hash-pinned corresponding-source artifacts byte-for-byte.
+packaging/patches/** -text
+*.patch -text

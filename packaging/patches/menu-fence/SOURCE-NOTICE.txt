@@ -1,0 +1,21 @@
+Local modified OptiScaler candidate: LastEpoch-late-hudless-ABI1-presentation-stats-V1-menu-fence
+
+Based on Skynizz/optiscaler-dlss5 v1.2.1, commit 6bfc4389c25054ef6747df6e6b1b470e9541c4da, licensed under GPL-3.0. This is an unofficial local modification. Dear ImGui retains its upstream MIT notice in OptiScaler/include/imgui and Licenses.
+
+Pinned original source archive:
+https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-source.zip
+SHA256: 1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507
+
+late-hudless.patch contains ALL local changes relative to that exact source archive: the selected B913 late-HUDless ABI1/presentation-counter work plus the two menu lifetime changes. menu-fence-only.patch is the focused review delta against B913. The unselected Present-probe experiment is excluded.
+
+To rebuild from clean corresponding source: extract the archive; from its OptiScaler-DLSS5-1.2.1 directory set $env:GIT_CEILING_DIRECTORIES=(Split-Path -Parent (Get-Location).Path) so a containing project repository does not affect patch paths. Run git -c core.autocrlf=false apply --check <absolute-path-to-late-hudless.patch>, then git -c core.autocrlf=false apply <absolute-path-to-late-hudless.patch>. Run powershell -ExecutionPolicy Bypass -File .\Build-Local.ps1 -BuildDirectoryName local-build-menu-fence -ParallelProcesses 4. VS2022 C++ v143 Build Tools and the Windows SDK are required. Build timestamps and toolchain versions affect the binary hash.
+
+In the existing mixed experimental working tree, Build-Candidate.ps1 and SourceOverride.targets instead compile the unchanged pinned with_dx12/dx11_with_dx12_sc.cpp from the archive. This avoids modifying or selecting the unrelated Present-probe source. The full patch applied to a clean archive needs no source override.
+
+Menu changes: serialize menu resource initialization/draw/cleanup; own device/queue/swapchain identities; fence every overlay submission; wait at most 50ms before ImGui/allocator reuse; skip drawing when pending; wait at most 250ms for cleanup and retain resources on ordinary timeout. Reentrant resource hooks read an atomic command-list identity without taking the menu lock. Frame generation deactivation happens before acquiring that lock. Queue/device/swapchain/format/dimension changes trigger fenced recreation.
+
+ImGui texture-upload changes: check resource creation/map/command-close/Signal results; replace the main-viewport infinite upload wait with a bounded 50ms wait; skip menu drawing until upload completion; distinguish UINT64_MAX/device removal from an ordinary timeout. Pending upload records retain COM objects across context shutdown and are collected when their fence completes or device is removed. An indefinitely stalled but unremoved device can retain these records until process exit; this avoids releasing in-flight memory. Optional upstream secondary-viewport support is unchanged and is not enabled by this overlay.
+
+Build and static export/patch checks passed. Runtime validation is pending; this candidate is not proof that the observed GPU hang is fixed. The conservative previous-overlay wait may reduce CPU/GPU overlap while an overlay is drawing and needs performance validation. No stage, selected backend hash, game installation, or user configuration was changed.
+
+Original LICENSE and Licenses/ notices remain in the source archive/tree. Preserve them and provide complete corresponding source, including this patch and build instructions, when distributing the GPL backend. NVIDIA proprietary runtimes retain separate licenses and are not embedded in this DLL. Existing upstream C4744 and LNK4098 build warnings remain recorded in variant-manifest.json.

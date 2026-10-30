@@ -1,0 +1,15 @@
+Last Epoch rendering bridge
+
+Adapted from Big Beautiful Walk, Copyright 2026 Big Beautiful Walk contributors.
+Source: https://github.com/Pseudogiant-xr/Big-Beautiful-Walk
+Native source is provided under Apache License 2.0. The complete upstream notice
+is retained in UPSTREAM-NOTICE and the licence in LICENSE.
+
+Changes: renamed exports and project identity; added contract validation,
+guarded COM access, diagnostic exports, depth/motion sample inspection, and
+optional read-only Streamline telemetry. No claim of Last Epoch compatibility
+or NVIDIA endorsement is implied by compilation.
+
+Optional Streamline headers retain NVIDIA's MIT licence. The default build
+contains no NVIDIA SDK code. OptiScaler and NVIDIA runtime DLLs are separately
+provided components with their own licensing terms.

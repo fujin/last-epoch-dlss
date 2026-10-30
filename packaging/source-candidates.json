@@ -1,0 +1,63 @@
+{
+  "SchemaVersion": 1,
+  "SnapshotDate": "2026-10-31",
+  "ManagedCandidate": {
+    "SHA256": "77A58078F2CB355E82CBAF442EDBCECE920974D35727366D342E1385210D187A",
+    "Purpose": "Native-DLAA final-camera HUDless capture",
+    "BuildPassed": true,
+    "RuntimeValidated": false,
+    "Deployed": false
+  },
+  "NativeCandidate": {
+    "SHA256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+    "Purpose": "HUDless capture diagnostics and bounded optional image evidence",
+    "BuildPassed": true,
+    "WARPContractPassed": true,
+    "RuntimeValidated": false,
+    "Deployed": false
+  },
+  "BackendCandidate": {
+    "Manifest": "patches/menu-fence/variant-manifest.json",
+    "SHA256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+    "BuildPassed": true,
+    "IndependentReviewPassed": true,
+    "RuntimeValidated": false,
+    "Deployed": false
+  },
+  "SourceFiles": [
+    {
+      "Path": "src/managed/Plugin.cs",
+      "SHA256": "BAB880F1546FC049DEA169108807CEBCC03E3FD60228C56B10FE7D435C74844C"
+    },
+    {
+      "Path": "src/managed/Native.cs",
+      "SHA256": "DBC74643C4230A49726E2B6D3B763222D62901D81D652F189384C6C6C2503706"
+    },
+    {
+      "Path": "src/managed/RenderingScope.cs",
+      "SHA256": "D394137FD183D238047AE32065B41B14E45F6C4F753D785DBFA76137C829AFE0"
+    },
+    {
+      "Path": "src/native/Native.cpp",
+      "SHA256": "3B78F51BD2F94D5D9E08C86025CC42A8F753B1FBAEFF1C34AFCBF64D8171DC07"
+    },
+    {
+      "Path": "src/native/Native.h",
+      "SHA256": "1FA524602D9486B833A3DCA67F40AF8103DA4BBDCD86762CD87EF54F5437FF09"
+    },
+    {
+      "Path": "src/native/OptiBackend.cpp",
+      "SHA256": "BB579BDA7139C689DF75344D5060C827327AA01F7AE3D3134D7D9A24844A6B72"
+    },
+    {
+      "Path": "src/native/ABI.md",
+      "SHA256": "F6B4E2E3AEA6D8828F2AE5DA46A425BDC30E011CCEA55F8145A716F4654756B6"
+    }
+  ],
+  "KnownLimits": [
+    "Reduced-resolution SR is unsupported; diagnostic symbols do not establish valid displayed SR.",
+    "Recorded native 5120x1440 run suffered a menu/device hang.",
+    "New final-camera HUDless capture and menu fix require controlled runtime validation.",
+    "No binaries or raw diagnostics are published."
+  ]
+}
