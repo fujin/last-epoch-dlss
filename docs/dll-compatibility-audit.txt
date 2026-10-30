@@ -6,7 +6,7 @@ It records actual paths, file/product versions and SHA256 hashes. It is not a
 new inventory of the later normal managed build or the native-display test now
 in progress. Later feature success is evidenced by the separate logs below.
 
-VERIFIED COMPONENT SET
+HISTORICAL VERIFIED COMPONENT SET
 
 Unity player: 6000.4.8f1, matching the installed game.
 BepInEx: 6.0.0-be.791+b782da4, with the documented generated-interop repair.
@@ -34,6 +34,99 @@ Streamline 2.14.1 archive, whose SHA256 is:
   92C4D954631A1710DA86CA3FA8D5034F2B9503838C95FC4AE977AE149319781B
 No unintended SR/FG binary version mix was found. There is no 2.14.16 Streamline
 runtime in this selected set; 310.9.16 is the separate NR model version.
+
+SELECTED FOLLOW-UP CANDIDATE
+
+The staging scripts now select the reviewed menu-fence backend:
+  571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6
+It retains the same external ABI and pinned NVIDIA dependencies and adds the
+overlay/ImGui resource-lifetime changes. Its exact complete source patch is in
+packaging\patches\menu-fence. Build/export/source checks passed. Selection does
+not update the historical loaded-module inventory.
+
+Follow-up PID 38116 ran approximately 23 minutes at 5120x1440 and closed normally.
+Menu tabs and NR/FG were exercised repeatedly, including more than six minutes
+with FG enabled; no hang occurred. Borderless Alt-Tab away and return worked with
+full image edges; after return, NR-off 4x measured 57.26 rendered fps / about
+228.7 DXGI calls per second. These are provisional call-throughput observations.
+Complete paired logs passed with zero target, dimension or device errors:
+  diagnostics\native-5120-menu-fence-571c-hudless\
+  diagnostics\Player-D3D11-20261030-223732-014.log
+This bounded test does not establish broad stability or that the old hang had
+only one cause.
+
+Late HUDless reached 36,498 accepted submissions near the end. The 31,212 rejected
+count followed deliberate FG-off periods and stopped increasing when FG resumed.
+The saved hudless-38116-epoch10-frame13232.bmp is vertically flipped. A perceived
+brightness difference against HDR desktop capture does not establish a color
+defect. Native RTV format 10 and
+boundMatchesCapture=0 are observations, not a proven defect cause. Managed 2101
+was built to correct orientation and bind the capture target before event2.
+
+Its subsequent raw-buffer test, PID 9808 with diagnostic backend A9F and native
+257A, confirmed color agreement but continued to show inverted orientation.
+After analysis-only Y alignment, a static stone region of 8,750 samples had
+MAE 0.450 on the 0-255 channel scale; another region measured 0.632. An additional
+sRGB conversion worsened the difference to approximately 62-67. No color
+conversion change is justified by this evidence. The raw files were not fixed
+by that analysis, and managed 2101 must not be described as an orientation fix.
+The later explicit CopyStd/mesh UV inversion candidate E841 passed the scoped
+capture comparison described next.
+
+PID 9808 closed normally and passed complete paired target/device checks:
+  diagnostics\native-5120-raw-color-comparison-9808\
+  diagnostics\Player-D3D11-20261030-230316-786.log
+The A9F diagnostic is separate from selected 571C, captures before FG/desktop
+composition and is unsuitable for benchmarking. Its source is preserved under
+packaging\patches\app-capture; raw images and logs remain local.
+
+CORRECTED FINAL-CAMERA CAPTURE: SCOPED RAW PROOF
+
+PID 14176, Old Road, native 5120x1440, stationary camera, NR off, DLAA + 4x FG:
+managed E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F
+and native 257A with the diagnostic A9F backend produced an upright HUDless image
+matching the actual application's encoded scene color at the same coordinates.
+The two BMPs were captured sequentially about one second apart. Two static stone
+regions measured MAE 0.465524/255 and 0.649444/255, and sky measured 0.453423/255.
+The flipped alternative was much worse; no extra gamma transform was needed.
+Health/mana orbs, ability/instruction UI, minimap/quest text and overhead player
+health were visibly absent from HUDless while present in the application image.
+
+The curated quantitative report is docs\validation\hudless-color-14176.json;
+the original local report is diagnostics\raw-color-comparison-14176.json.
+This validates capture orientation/color and the listed UI omissions for this
+world scene. It is not proof of every menu/camera/combat case, artifact-free
+generated UI, broad stability, or physical-panel FPS.
+
+NR on at half working width/height also passed: two stone patches and sky had
+raw capture/app MAE 0.786057, 1.098444 and 0.544012 out of 255; stone on/off
+differences were 9.305981 and 10.648667, exceeding same-condition capture noise.
+Report: docs\validation\hudless-color-14176-nr-on.json. Actual NR composition
+is logged at 12:20:01.063488, OptiScaler.log line 5065, model 2560x720. Lines 5070-5071
+report 2.46-2.48 ms total pass cost (2.03-2.05 ms model plus 0.43 ms integration).
+These are scoped pass timings, not final benchmarks.
+
+The complete 14176 run closed normally and passed all four checked error counts.
+Saved folder: diagnostics\native-5120-explicit-capture-14176\.
+Unity log: diagnostics\Player-D3D11-20261030-231317-030.log.
+Late HUDless reached 37,073 accepted with nine constant startup rejects.
+Closed-menu observations: NR off 56.14 rendered fps / 224 DXGI calls per second;
+NR on at 0.5 scale 48.98 / 196. Diagnostic capture can affect timing.
+
+FINAL NORMAL-BACKEND SMOKE TEST
+
+Installed 571C/E841/257A hashes were verified; diagnostic capture flags were cleared.
+PID 7236 ran native 5120x1440 DLAA + 4x FG, NR off, late HUDless on, VerifyPixels off.
+Menu open/close succeeded, the full-width HUD was visible, and shutdown was normal.
+Complete paired logs passed with RenderTargetErrors=0, ColorDepthMismatches=0,
+PlayerDeviceErrors=0 and BackendDeviceErrors=0:
+  diagnostics\native-5120-final-e841-571c-7236\
+  diagnostics\Player-D3D11-20261030-232734-696.log
+Native evaluations 8569/rejections 0; HUDless 8559 accepted/nine startup rejects,
+with no ongoing rejection growth. Unity 55.95-56.13 fps and 224.3-224.5 DXGI calls/s
+were observed, exactly 4.000 calls/client. The 240 fps target was not reached.
+These calls do not independently establish unique generated images or physical
+panel scans. This is a bounded smoke test, not broad stability certification.
 
 API COMPATIBILITY REVIEW
 
@@ -73,21 +166,23 @@ successful evaluation evidence for this particular signed model/forwarder pair.
 The complete corresponding Unity log:
   diagnostics\Player-D3D11-20261030-212935-665.log
 passed Test-RenderLog.ps1 -RequireClean with RenderTargetErrors=0 and
-ColorDepthMismatches=0. Late HUDless acceptance is NOT verified in DLAA: the saved
-run has accepted=0 and rejected=0 throughout. For example, the sample with
+ColorDepthMismatches=0. In this historical 1600x900 run, late HUDless was not
+working: accepted=0 and rejected=0 throughout. For example, the sample with
 capturedFrameTokens=89019 still has accepted=0. The final destination was a
 full-resolution TempBuffer75 and the capture eligibility check was false.
-Captured tokens must not be confused with accepted HUDless images. Final-camera
-capture is under repair, and verified HUD separation or artifact-free UI is not
-claimed. The independent FG ratios and actual NR evaluation remain proven.
+Captured tokens must not be confused with accepted HUDless images. This earlier
+failure led to the final-camera changes; the later E841 scene-specific raw proof
+is recorded above. The independent FG ratios and actual NR evaluation from this
+historical run remain proven. Universal artifact-free UI is not claimed.
 
 REMAINING LIMITS
 
 Reduced-resolution Quality/Balanced/Performance are still broken: experimental
 runs paired incompatible PP temporary color/depth sizes and showed white output.
-Successful DLSS evaluation did not make that output correct. Normal managed build
-6BEFF32D726B088F886221AF86CFF4C94F4895A33E697DC1AFCDADB20BDB2579 now rejects scaled
-modes without installing graphics hooks. Keep those experiments isolated.
+Successful DLSS evaluation did not make that output correct. Normal E841 retains
+the scaled-mode rejection introduced in 6BEF and does not install those graphics
+hooks. Set-Profile also requires -ExperimentalScaling for a diagnostic scaling
+profile. Keep those experiments isolated; the normal build still rejects them.
 
 The user target is native 5120x1440 BORDERLESS, not the old 3840x2160 exclusive
 setting. A clean restart resolved startup UI clipping, and foreground return
@@ -107,10 +202,11 @@ PlayerDeviceErrors=0, BackendDeviceErrors=753, Passed=false. Clean Unity target
 dimensions therefore did not imply a healthy rendering device.
 
 Normal close of hung PID 35412 timed out; only that test process was then forcibly
-closed. An overlay fence/resource-lifetime backend fix and the separate correct
-DLAA final-camera HUDless capture are being prepared. Neither is deployed at
-this handoff. Native performance/stability validation is NOT complete; retest
-the menu, Alt-Tab, transitions, UI and sustained play after those changes.
+closed. At that historical failure, the overlay and final-camera capture changes
+had not been deployed. The later PID 38116 results are recorded above: menu
+survival improved in a limited test, but accepted capture pixels were incorrect.
+Native performance/stability validation is NOT complete; retest the menu,
+Alt-Tab, transitions, UI and sustained play after the capture correction.
 
 Test-RenderLog.ps1 now accepts -BackendLogPath and checks device loss in both
 logs. It rejects the real native-mode failure and passes the saved 1600x900 run:
@@ -121,9 +217,21 @@ Expected failure (-RequireClean throws):
 
   .\scripts\Test-RenderLog.ps1 -PlayerLogPath '.\diagnostics\Player-D3D11-20261030-220301-568.log' -BackendLogPath '.\diagnostics\native-5120-menu-device-hung\OptiScaler.log' -RequireClean
 
+LATER NR-OFF COMPARISON
+
+PID 14940 closed normally; complete paired-log validation passed. Evidence:
+  diagnostics\native-5120-nr-off-effects-high\
+  diagnostics\Player-D3D11-20261030-222222-807.log
+Native 5120x1440 borderless, DLAA, 4x FG, NR off: Ultra observed 56.2-56.5
+rendered fps / approximately 225 DXGI present calls per second. Shadows and
+volumetric lighting changed to High observed 56.8-56.9 / approximately 227.
+This short comparison established no meaningful settings gain; it is neither
+a final benchmark nor a physical-panel scanout measurement. It predates the
+selected menu-fence/final-camera-HUDless candidate and does not validate those.
+
 Only offline DLSSProbe sessions have been tested; online
 play is unverified. Insert opens OptiScaler; F10 toggles the diagnostic panel,
-which starts hidden in normal build 6BEF. F8/F9 are game keys, not mod controls.
+which starts hidden in the normal build. F8/F9 are game keys, not mod controls.
 
 PROVENANCE REFERENCES
 

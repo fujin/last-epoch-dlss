@@ -1,4 +1,6 @@
 * text=auto eol=lf
+# Preserve the existing compiled-source bytes recorded in source-candidates.json.
+src/native/OptiBackend.cpp -text
 # Preserve hash-pinned corresponding-source artifacts byte-for-byte.
 packaging/patches/** -text
 *.patch -text

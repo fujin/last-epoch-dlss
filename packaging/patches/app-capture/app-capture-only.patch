@@ -1,0 +1,290 @@
+diff --git a/OptiScaler/with_dx12/dx11_with_dx12_sc.cpp b/OptiScaler/with_dx12/dx11_with_dx12_sc.cpp
+index a66dc6d..e6966c9 100644
+--- a/OptiScaler/with_dx12/dx11_with_dx12_sc.cpp
++++ b/OptiScaler/with_dx12/dx11_with_dx12_sc.cpp
+@@ -17,6 +17,9 @@
+ #include <d3d11_4.h>
+ #include <d3d12.h>
+ #include <dxgi1_6.h>
++#include <atomic>
++#include <filesystem>
++#include <mutex>
+ 
+ #pragma intrinsic(_ReturnAddress)
+ 
+@@ -24,6 +27,254 @@ static int scCount = 0;
+ 
+ namespace
+ {
++std::atomic<bool> appCaptureFaulted { false };
++// Diagnostic-only candidate. No hook or persistent setting: explicitly opt in
++// through this process's environment and a read-only marker file. At most two
++// raw application frames are written; the selected production backend has none
++// of this code. Copy/Map never changes source pixels or pipeline bindings.
++struct AppPresentCapture
++{
++    std::mutex mutex;
++    std::wstring requestPath, outputDirectory;
++    bool enabled = false, stopped = false;
++    UINT64 calls = 0, lastPoll = 0, servedRequest = 0, pendingRequest = 0;
++    UINT64 sourceFrame = 0, sourceCall = 0, started = 0;
++    LONGLONG sourceQpc = 0;
++    UINT captured = 0, attempts = 0, chain = 0, selectedIndex = 0, fakeIndex = 0;
++    D3D11_TEXTURE2D_DESC desc {};
++    ComPtr<ID3D11Texture2D> staging;
++    ComPtr<ID3D11Device> device;
++    ComPtr<ID3D11DeviceContext> context;
++
++    AppPresentCapture()
++    {
++        wchar_t flag[3] {};
++        if (GetEnvironmentVariableW(L"LE_DLSS_DUMP_APP_PRESENT", flag, 3) != 1 || flag[0] != L'1')
++            return;
++        const DWORD size = GetEnvironmentVariableW(L"LE_DLSS_APP_PRESENT_DUMP_REQUEST", nullptr, 0);
++        if (size <= 1 || size >= 32768)
++            return;
++        requestPath.resize(size);
++        const DWORD read = GetEnvironmentVariableW(L"LE_DLSS_APP_PRESENT_DUMP_REQUEST", requestPath.data(), size);
++        if (read == 0 || read >= size)
++            return;
++        requestPath.resize(read);
++        const std::filesystem::path path(requestPath);
++        if (!path.is_absolute())
++            return;
++        outputDirectory = path.parent_path().wstring();
++        const DWORD attributes = GetFileAttributesW(outputDirectory.c_str());
++        if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY))
++            return;
++        enabled = true;
++        LOG_INFO("LEAppPresentCapture enabled: max2 raw8-bit application BMPs, marker={}, output={}; "
++                 "nonblocking GPU readback, diagnostic CPU/file overhead only",
++                 path.filename().string(), path.parent_path().string());
++    }
++};
++
++AppPresentCapture& AppCaptureState()
++{
++    // Retain a timed-out GPU copy until process teardown/device removal. Never
++    // release in-flight diagnostic resources merely because a CPU timer expired.
++    static auto* capture = new AppPresentCapture;
++    return *capture;
++}
++
++void RetireAppCapture(AppPresentCapture& capture)
++{
++    capture.staging.Reset();
++    capture.context.Reset();
++    capture.device.Reset();
++    capture.pendingRequest = 0;
++}
++
++bool WriteAppCaptureBytes(HANDLE file, const void* data, DWORD size)
++{
++    const auto* bytes = static_cast<const BYTE*>(data);
++    while (size)
++    {
++        DWORD written = 0;
++        if (!WriteFile(file, bytes, size, &written, nullptr) || written == 0)
++            return false;
++        bytes += written;
++        size -= written;
++    }
++    return true;
++}
++
++void PollAppCapture(AppPresentCapture& capture, ID3D11DeviceContext* currentContext)
++{
++    if (!capture.staging)
++        return;
++    const HRESULT removed = capture.device->GetDeviceRemovedReason();
++    if (FAILED(removed))
++    {
++        LOG_WARN("LEAppPresentCapture device removed: {:X}; capture stopped", (UINT) removed);
++        RetireAppCapture(capture);
++        capture.stopped = true;
++        return;
++    }
++    if (capture.stopped || capture.context.Get() != currentContext)
++        return;
++
++    D3D11_MAPPED_SUBRESOURCE mapped {};
++    const HRESULT result = currentContext->Map(capture.staging.Get(), 0, D3D11_MAP_READ,
++                                               D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
++    if (result == DXGI_ERROR_WAS_STILL_DRAWING)
++    {
++        if (GetTickCount64() - capture.started > 5000)
++        {
++            LOG_WARN("LEAppPresentCapture readback pending >5s; disabled with resources retained, request={}",
++                     capture.pendingRequest);
++            capture.stopped = true;
++        }
++        return;
++    }
++    if (FAILED(result))
++    {
++        // The GPU may still own the copy. Keep it unless actual device loss is
++        // established, and never retry a failing Map indefinitely.
++        LOG_WARN("LEAppPresentCapture Map failed: {:X}; disabled with resources retained", (UINT) result);
++        capture.stopped = true;
++        return;
++    }
++    struct UnmapOnExit
++    {
++        ID3D11DeviceContext* context;
++        ID3D11Resource* resource;
++        ~UnmapOnExit() { if (resource) context->Unmap(resource, 0); }
++    } unmap { currentContext, capture.staging.Get() };
++    if (!mapped.pData || mapped.RowPitch < UINT64(capture.desc.Width) * 4)
++    {
++        capture.stopped = true;
++        return;
++    }
++
++    const UINT width = capture.desc.Width, height = capture.desc.Height;
++    const bool rgba = capture.desc.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS ||
++                      capture.desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
++                      capture.desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
++    std::vector<BYTE> pixels(size_t(width) * height * 4);
++    UINT64 sums[3] {}, rawHash = 14695981039346656037ull;
++    for (UINT y = 0; y < height; ++y)
++    {
++        const auto* source = static_cast<const BYTE*>(mapped.pData) + size_t(y) * mapped.RowPitch;
++        BYTE* destination = pixels.data() + size_t(y) * width * 4;
++        for (UINT x = 0; x < width; ++x)
++        {
++            destination[x * 4] = source[x * 4 + (rgba ? 2 : 0)];
++            destination[x * 4 + 1] = source[x * 4 + 1];
++            destination[x * 4 + 2] = source[x * 4 + (rgba ? 0 : 2)];
++            destination[x * 4 + 3] = 255;
++            for (UINT channel = 0; channel < 3; ++channel)
++            {
++                const BYTE value = destination[x * 4 + (2 - channel)];
++                sums[channel] += value;
++                rawHash = (rawHash ^ value) * 1099511628211ull;
++            }
++        }
++    }
++    currentContext->Unmap(capture.staging.Get(), 0);
++    unmap.resource = nullptr;
++
++    const auto name = L"app-present-" + std::to_wstring(GetCurrentProcessId()) + L"-chain" +
++        std::to_wstring(capture.chain) + L"-frame" + std::to_wstring(capture.sourceFrame) + L"-request" +
++        std::to_wstring(capture.pendingRequest) + L".bmp";
++    const auto path = (std::filesystem::path(capture.outputDirectory) / name).wstring();
++    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
++    bool written = false;
++    if (file != INVALID_HANDLE_VALUE)
++    {
++        BITMAPFILEHEADER header {};
++        BITMAPINFOHEADER info {};
++        header.bfType = 0x4d42;
++        header.bfOffBits = sizeof(header) + sizeof(info);
++        header.bfSize = header.bfOffBits + static_cast<DWORD>(pixels.size());
++        info.biSize = sizeof(info); info.biWidth = LONG(width); info.biHeight = -LONG(height);
++        info.biPlanes = 1; info.biBitCount = 32; info.biCompression = BI_RGB;
++        info.biSizeImage = static_cast<DWORD>(pixels.size());
++        written = WriteAppCaptureBytes(file, &header, sizeof(header)) &&
++                  WriteAppCaptureBytes(file, &info, sizeof(info)) &&
++                  WriteAppCaptureBytes(file, pixels.data(), static_cast<DWORD>(pixels.size()));
++        if (!CloseHandle(file)) written = false;
++        if (!written) DeleteFileW(path.c_str()); // Only the CREATE_NEW file owned by this attempt.
++    }
++    if (written)
++    {
++        ++capture.captured;
++        const double divisor = double(width) * height * 255;
++        LOG_INFO("LEAppPresentCapture wrote={} request={} appFrame={} sourceCall={} sourceQpc={} "
++                 "readbackCall={} chain={} selectedIndex={} fakeIndex={} size={}x{} format={} "
++                 "rawMeanRGB={:.6f},{:.6f},{:.6f} rgbHash={:016X}; top-downBGRA8, alpha255, "
++                 "no gamma/tonemap/Yflip; application UI included, generated frames/desktop excluded",
++                 std::filesystem::path(path).filename().string(), capture.pendingRequest, capture.sourceFrame,
++                 capture.sourceCall, capture.sourceQpc, capture.calls, capture.chain, capture.selectedIndex,
++                 capture.fakeIndex, width, height, UINT(capture.desc.Format), sums[0] / divisor,
++                 sums[1] / divisor, sums[2] / divisor, rawHash);
++    }
++    else
++        LOG_WARN("LEAppPresentCapture file write failed; request={} error={}", capture.pendingRequest, GetLastError());
++    RetireAppCapture(capture);
++}
++
++void CaptureAppPresent(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* source,
++                       UINT chain, UINT selectedIndex, UINT fakeIndex)
++{
++    auto& capture = AppCaptureState();
++    if (!capture.enabled || !device || !context || !source)
++        return;
++    const std::unique_lock<std::mutex> lock(capture.mutex, std::try_to_lock);
++    if (!lock.owns_lock()) return;
++    ++capture.calls;
++    PollAppCapture(capture, context);
++    if (capture.stopped || capture.staging || capture.captured >= 2 || capture.attempts >= 2 ||
++        context->GetType() != D3D11_DEVICE_CONTEXT_IMMEDIATE)
++        return;
++    if (capture.lastPoll && capture.calls - capture.lastPoll < 60)
++        return;
++    capture.lastPoll = capture.calls;
++    WIN32_FILE_ATTRIBUTE_DATA marker {};
++    if (!GetFileAttributesExW(capture.requestPath.c_str(), GetFileExInfoStandard, &marker) ||
++        (marker.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
++        return;
++    const UINT64 request = (UINT64(marker.ftLastWriteTime.dwHighDateTime) << 32) | marker.ftLastWriteTime.dwLowDateTime;
++    if (!request || request == capture.servedRequest) return;
++    capture.servedRequest = request;
++    ++capture.attempts;
++    source->GetDesc(&capture.desc);
++    const auto& desc = capture.desc;
++    const bool supported = desc.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS || desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
++        desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || desc.Format == DXGI_FORMAT_B8G8R8A8_TYPELESS ||
++        desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
++    if (!supported || desc.Width == 0 || desc.Height == 0 || desc.Width > 8192 || desc.Height > 8192 ||
++        desc.MipLevels != 1 || desc.ArraySize != 1 || desc.SampleDesc.Count != 1)
++    {
++        LOG_WARN("LEAppPresentCapture unsupported source layout {}x{} format={}; request={} consumed",
++                 desc.Width, desc.Height, UINT(desc.Format), request);
++        return;
++    }
++    auto stagingDesc = desc;
++    stagingDesc.Usage = D3D11_USAGE_STAGING; stagingDesc.BindFlags = 0;
++    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ; stagingDesc.MiscFlags = 0;
++    const HRESULT result = device->CreateTexture2D(&stagingDesc, nullptr, &capture.staging);
++    if (FAILED(result))
++    {
++        LOG_WARN("LEAppPresentCapture staging creation failed {:X}; request={} consumed", UINT(result), request);
++        return;
++    }
++    capture.device = device; capture.context = context; capture.pendingRequest = request;
++    capture.sourceFrame = State::Instance().frameCount; capture.sourceCall = capture.calls;
++    capture.chain = chain; capture.selectedIndex = selectedIndex; capture.fakeIndex = fakeIndex;
++    capture.started = GetTickCount64();
++    LARGE_INTEGER qpc {}; QueryPerformanceCounter(&qpc); capture.sourceQpc = qpc.QuadPart;
++    context->CopyResource(capture.staging.Get(), source);
++    LOG_INFO("LEAppPresentCapture queued request={} appFrame={} sourceCall={} sourceQpc={} chain={} "
++             "selectedIndex={} fakeIndex={} source={:X} size={}x{} format={}; Map will not block",
++             request, capture.sourceFrame, capture.sourceCall, capture.sourceQpc, chain, selectedIndex,
++             fakeIndex, reinterpret_cast<size_t>(source), desc.Width, desc.Height, UINT(desc.Format));
++}
++
+ template <typename T> void SafeRelease(T*& value)
+ {
+     if (value != nullptr)
+@@ -1071,6 +1322,20 @@ bool Dx11wDx12SC::_CopyDx11BackBufferToShared(UINT index)
+               (size_t) _sharedDx11BackBufferCopies[_currentFakeIndex]);
+ 
+     _dx11Context->CopyResource(_sharedDx11BackBufferCopies[_currentFakeIndex], sourceTexture);
++    if (!appCaptureFaulted.load(std::memory_order_relaxed))
++    {
++        try { CaptureAppPresent(_dx11Device, _dx11Context, sourceTexture, _id, index, _currentFakeIndex); }
++        catch (const std::exception& error)
++        {
++            appCaptureFaulted.store(true, std::memory_order_relaxed);
++            LOG_WARN("LEAppPresentCapture disabled after exception; pending resources retained: {}", error.what());
++        }
++        catch (...)
++        {
++            appCaptureFaulted.store(true, std::memory_order_relaxed);
++            LOG_WARN("LEAppPresentCapture disabled after unknown exception; pending resources retained");
++        }
++    }
+     sourceTexture->Release();
+     return true;
+ }

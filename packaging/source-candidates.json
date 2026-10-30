@@ -2,32 +2,41 @@
   "SchemaVersion": 1,
   "SnapshotDate": "2026-10-31",
   "ManagedCandidate": {
-    "SHA256": "77A58078F2CB355E82CBAF442EDBCECE920974D35727366D342E1385210D187A",
-    "Purpose": "Native-DLAA final-camera HUDless capture",
+    "SHA256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+    "Purpose": "Owned 8-bit scratch and explicit CopyStd DrawMesh UV inversion for final-camera capture",
     "BuildPassed": true,
-    "RuntimeValidated": false,
-    "Deployed": false
+    "IndependentReviewPassed": true,
+    "RuntimeValidated": true,
+    "RuntimeTested": true,
+    "Deployed": true,
+    "RuntimeValidationScope": "PID 14176 Old Road raw capture proof with NR off/on; final regular 571C PID 7236 smoke passed with NR off, native 5120x1440 DLAA + 4x FG and LateHudless. Complete paired target/dimension/device checks zero. Broader scene/stability coverage unverified."
   },
   "NativeCandidate": {
     "SHA256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
     "Purpose": "HUDless capture diagnostics and bounded optional image evidence",
     "BuildPassed": true,
     "WARPContractPassed": true,
-    "RuntimeValidated": false,
-    "Deployed": false
+    "RuntimeValidated": true,
+    "Deployed": true,
+    "Staged": true,
+    "RuntimeTested": true,
+    "RuntimeValidationScope": "PID 14176 Old Road raw capture proof with NR off/on; final regular 571C PID 7236 smoke passed with NR off, native 5120x1440 DLAA + 4x FG and LateHudless. Complete paired target/dimension/device checks zero. Broader scene/stability coverage unverified."
   },
   "BackendCandidate": {
     "Manifest": "patches/menu-fence/variant-manifest.json",
     "SHA256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
     "BuildPassed": true,
     "IndependentReviewPassed": true,
-    "RuntimeValidated": false,
-    "Deployed": false
+    "RuntimeValidated": true,
+    "Deployed": true,
+    "SelectedByStagingScript": true,
+    "RuntimeTested": true,
+    "RuntimeValidationScope": "Bounded 23-minute native 5120 menu/NR/FG/Alt-Tab test plus final E841/native 257A regular smoke: menu open/close, normal shutdown and complete paired target/device checks clean. Broad stability unverified."
   },
   "SourceFiles": [
     {
       "Path": "src/managed/Plugin.cs",
-      "SHA256": "BAB880F1546FC049DEA169108807CEBCC03E3FD60228C56B10FE7D435C74844C"
+      "SHA256": "ADF53ECE2D7E62676E8F1EBC077A22C737BD8A28F69C96B5F3B4E319ACBFB714"
     },
     {
       "Path": "src/managed/Native.cs",
@@ -57,7 +66,48 @@
   "KnownLimits": [
     "Reduced-resolution SR is unsupported; diagnostic symbols do not establish valid displayed SR.",
     "Recorded native 5120x1440 run suffered a menu/device hang.",
-    "New final-camera HUDless capture and menu fix require controlled runtime validation.",
-    "No binaries or raw diagnostics are published."
-  ]
+    "Raw capture passed in one Old Road scene and final normal-backend smoke passed. Broader scene/UI/generated-frame and stability coverage remains unverified.",
+    "No binaries or raw diagnostics are published.",
+    "The requested 240 fps target was not achieved; DXGI call counts do not independently prove unique generated images or panel scans."
+  ],
+  "ValidationStatus": "E841/native 257A raw capture orientation/color/UI-omission passed with NR off/on. Normal 571C restored; final regular PID 7236 smoke passed clean complete paired logs, menu open/close and normal shutdown. All installed hashes verified. Broad stability and online play remain unverified.",
+  "RuntimeEvidence": "backend-plan.json: RuntimeValidation.MenuFenceAndHudlessFollowUp",
+  "DiagnosticAppCaptureCandidate": {
+    "SHA256": "A9F3C908FC3DDD033EC53142BF7A18B5E209FBA406D178DD809D5C7E5DE635D9",
+    "Manifest": "patches/app-capture/variant-manifest.json",
+    "Purpose": "Raw application swapchain capture before FG/desktop composition for limited color/orientation comparison",
+    "DefaultSelected": false,
+    "BuildPassed": true,
+    "SourceReconstructionPassed": true,
+    "IndependentReviewPassed": true,
+    "JournalFixtureChecksPassed": 5,
+    "RuntimeValidated": true,
+    "PerformanceMeasurementSuitable": false,
+    "RuntimeValidationScope": "PID 9808 raw app-buffer capture compared with HUDless image; normal close and complete paired target/device checks clean. Diagnostic only, no benchmark claim."
+  },
+  "PreviousTestedManagedCandidates": [
+    {
+      "SHA256": "77A58078F2CB355E82CBAF442EDBCECE920974D35727366D342E1385210D187A",
+      "Purpose": "Native-DLAA final-camera HUDless capture",
+      "BuildPassed": true,
+      "RuntimeValidated": false,
+      "Deployed": true,
+      "Staged": true,
+      "RuntimeTested": true
+    },
+    {
+      "SHA256": "2101D9733A492791F63F801FB99A1A5D6D12F914023D375577C0D34A14765562",
+      "Purpose": "Flip-only correction for native-DLAA final-camera HUDless capture; explicit capture-target bind before event2",
+      "BuildPassed": true,
+      "RuntimeValidated": false,
+      "RuntimeTested": true,
+      "Deployed": true,
+      "RuntimeOutcome": "PID 9808: direct raw colors match after analysis-only Y alignment, but Unity Blit flip was ineffective; orientation still incorrect."
+    }
+  ],
+  "CorrectedCaptureReport": "../docs/validation/hudless-color-14176.json",
+  "FinalInstalledProfile": "DLAA + 4x FG, late HUDless enabled, NR off, NR working scale 0.5; diagnostic capture environment cleared.",
+  "NormalBackendRestored": true,
+  "FinalRegularSmokePassed": true,
+  "FinalRegularSmokeEvidence": "backend-plan.json: RuntimeValidation.CurrentInstalledConfiguration"
 }

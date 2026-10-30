@@ -1,6 +1,6 @@
 {
   "SchemaVersion": 1,
-  "Status": "Native 1600x900 DLAA, NVIDIA 2x/3x/4x presentation throughput and actual DLSS 5 NR evaluation/composition verified offline. Native 5120x1440 world throughput observed, but menu opening was followed by GPU device hang; stability validation incomplete. Reduced-resolution SR unsupported; DLAA HUDless capture under repair.",
+  "Status": "Offline native DLAA, NVIDIA 2x/3x/4x call throughput and actual DLSS 5 NR evaluation verified. E841 upright scene-color/UI-omission proof passed in Old Road with NR off/on. Selected 571C/E841/257A final 5120x1440 regular smoke passed with clean complete paired logs and normal close. Observed about 56 rendered fps/224 DXGI calls per second; 240 fps target not achieved. Reduced-resolution SR unsupported; broad stability/online play unverified.",
   "Target": {
     "Game": "Last Epoch",
     "Unity": "6000.4.8f1 IL2CPP",
@@ -11,7 +11,7 @@
       "Width": 5120,
       "Height": 1440,
       "Mode": "Borderless",
-      "Validation": "Provisional world rendering/throughput observed; startup clipping resolved after clean restart and foreground return worked. GPU device hung after menu opening; stability and final performance validation incomplete.",
+      "Validation": "Native5120x1440 borderless final regular-backend smoke passed: menu open/close, full-width HUD, normal close and zero checked target/dimension/device errors. Prior controlled run also passed Alt-Tab. Broad stability unverified.",
       "ObsoleteSetting": "3840x2160 exclusive is not the user target"
     }
   },
@@ -26,17 +26,19 @@
     "SourceArchiveUrl": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-source.zip",
     "SourceArchiveSHA256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
     "LocalVariant": {
-      "Name": "LastEpoch-late-hudless-ABI1-presentation-stats-V1",
-      "DllSHA256": "B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7",
-      "Manifest": "vendor/optiscaler-local/local-build-presentation/variant-manifest.json",
+      "Name": "LastEpoch-late-hudless-ABI1-presentation-stats-V1-menu-fence",
+      "DllSHA256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+      "Manifest": "packaging/patches/menu-fence/variant-manifest.json",
       "SourceTree": "vendor/optiscaler-local",
       "StagingScript": "scripts/Stage-LocalBackend.ps1",
-      "ProbeCandidate": "Separate optional Present-probe build is not selected by the staging helper"
+      "ProbeCandidate": "Separate optional Present-probe build is not selected by the staging helper",
+      "Status": "Selected 571C passed a bounded 23-minute menu/control run and final E841/native 257A normal-backend smoke test with clean complete paired logs. Broad stability remains unverified.",
+      "PreviousVerifiedDllSHA256": "B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7"
     }
   },
   "OptionalNeuralRendering": {
     "EnabledByDefault": false,
-    "Status": "Official signed NVIDIA 310.9.16 model successfully evaluated/composed at 1600x900 with same-scene on/off check. Native 5120x1440 world run with NR WorkingScale=0.5 produced provisional throughput observations, then a menu/device-hang failure; native stability remains unvalidated.",
+    "Status": "Official signed NVIDIA 310.9.16 model actually evaluated/composed at 1600x900 and 5120x1440 output with model 2560x720. Native Old Road NR-on raw capture matched application color and omitted listed UI. Logged native NR pass 2.46-2.48 ms; final installed profile leaves NR off. Scoped observations, not final benchmark or broad compatibility proof.",
     "ModelVersion": "310.9.16.0",
     "ModelPurpose": "DLSS 5 Neural Rendering; separate from DLSS Super Resolution and Multi Frame Generation",
     "TargetGpu": "GeForce RTX 5080 (RTX 50-series native runtime)",
@@ -98,7 +100,7 @@
       "Route": "OptiScaler dlss_12: D3D11 inputs shared with D3D12, existing NR pass before FG and UI",
       "FurtherTexturesRequiredByPinnedFork": false,
       "Limitations": [
-        "This community integration has successful native 1600x900 evaluation/composition evidence; broad game compatibility and the 5120x1440 borderless target are not yet established.",
+        "Native 1600x900 evaluation and bounded 5120x1440 NR/model/capture tests passed; broad game-state compatibility, stability and online play remain unverified.",
         "The official model hash and Authenticode signature establish provenance; actual evaluation is separately evidenced in the saved success log.",
         "Initial DlssNr.Enabled remains false. Fetch-NeuralRendering.ps1 stages files without enabling the feature.",
         "The official Remix driver minimum is 616.92. Actual tested driver NGX loader was 32.0.16.2101.",
@@ -264,11 +266,11 @@
     }
   ],
   "ValidationRequired": [
-    "Repair and retest the native 5120x1440 borderless menu/device hang; no completed native stability or final performance claim.",
+    "Repeat and broaden the successful bounded 571C native 5120x1440 menu/control test; no broad stability or final performance claim.",
     "Repeat menu, Alt-Tab, camera motion, combat effects, UI, transitions and sustained-play checks; scan the complete Unity and backend logs using Test-RenderLog.ps1 -PlayerLogPath <Unity-log> -BackendLogPath <OptiScaler-log> -RequireClean.",
-    "Measure controlled performance separately; the 1600x900 diagnostic run used GPU readbacks, and the native run ended in device loss. DXGI call/sequence deltas are not physical panel scanouts.",
+    "Measure controlled performance separately: the 1600x900 diagnostic run used GPU readbacks, the early B913 native run ended in device loss, and later successful 571C tests were bounded functional checks. DXGI call/sequence deltas are not physical panel scanouts.",
     "Keep reduced-resolution Quality/Balanced/Performance disabled in the normal build until postprocessing temporary-size mismatches and white presentation are resolved and visually retested.",
-    "Repair and verify true final-camera HUDless capture in DLAA; require accepted image submissions rather than captured frame tokens, then inspect UI quality.",
+    "Broaden the successful E841 raw capture/UI-omission test beyond stationary Old Road: other cameras, menus, transitions, combat and generated-frame UI quality.",
     "Online play remains unverified; verified sessions used the offline DLSSProbe character."
   ],
   "ExcludedFromFgOnlyRuntime": [
@@ -319,7 +321,7 @@
       }
     ],
     "PresentationEvidence": "diagnostics/dlaa-fg234-nr-success-1600/LogOutput.log",
-    "PresentationLimit": "Independent underlying DXGI call throughput; not physical panel scanouts. Diagnostic readbacks were on, so no final benchmark is claimed.",
+    "PresentationLimit": "Independent DXGI presentation call throughput; does not independently establish unique generated images or physical panel scanouts. No final benchmark claim.",
     "NeuralRendering": {
       "ActualEvaluationAndComposition": true,
       "Evidence": "diagnostics/dlaa-fg234-nr-success-1600/OptiScaler.log",
@@ -329,7 +331,7 @@
       "ObservedPassCostMillisecondsApproximately": 3,
       "Benchmark": false
     },
-    "LateHudless": "NOT verified in DLAA: saved successful run has accepted=0 and rejected=0 throughout, including a sample with capturedFrameTokens=89019. Captured tokens are not accepted HUDless images. Final full-resolution TempBuffer75 was ineligible; final-camera capture is under repair. No verified HUD separation is claimed.",
+    "LateHudless": "E841/native 257A passed a raw-buffer comparison in PID 14176 Old Road at 5120x1440, NR off, DLAA + 4x FG: upright same-coordinate image, matching static scene color, listed UI elements omitted. Earlier 77A/2101 orientation failed; accepted counters alone did not prove correctness. Broader scene/UI and generated-frame artifact testing remains pending.",
     "RenderLog": {
       "Path": "diagnostics/Player-D3D11-20261030-212935-665.log",
       "WholeFileChecked": true,
@@ -340,20 +342,21 @@
       "BackendDeviceErrors": 0
     },
     "NormalManagedBuild": {
-      "SHA256": "6BEFF32D726B088F886221AF86CFF4C94F4895A33E697DC1AFCDADB20BDB2579",
-      "Path": "build/managed-native-history/LastEpochGraphics.dll",
+      "SHA256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+      "Path": "build/managed-native-hudless-copy/LastEpochGraphics.dll",
       "Mode": "Native-resolution DLAA only",
       "ScaledModes": "Quality/Balanced/Performance rejected; experimental builds remain isolated",
-      "DiagnosticPanelStartsHidden": true
+      "DiagnosticPanelStartsHidden": true,
+      "Historical1600x900BuildSHA256": "6BEFF32D726B088F886221AF86CFF4C94F4895A33E697DC1AFCDADB20BDB2579"
     },
     "Controls": {
       "BackendMenu": "Insert",
       "DiagnosticPanel": "F10",
       "F8F9": "Game keys, not mod controls"
     },
-    "CompatibilityAudit": "diagnostics/dll-compatibility-audit.txt",
+    "CompatibilityAudit": "docs/dll-compatibility-audit.txt",
     "LoadedModuleInventory": "diagnostics/loaded-dll-audit.json (historical PID 27580 snapshot; newer validation has separate logs)",
-    "PreferredDisplayStatus": "5120x1440 borderless world rendering observed; Ultra/DLAA4/NR WorkingScale=0.5 uncapped approximately 49.2 rendered fps and 197 DXGI calls/s at 98% GPU use. Native run failed stability after OptiScaler menu opening. Fixes in preparation, neither deployed.",
+    "PreferredDisplayStatus": "Native5120x1440 borderless final regular-backend smoke passed: menu open/close, full-width HUD, normal close and zero checked target/dimension/device errors. Prior controlled run also passed Alt-Tab. Broad stability unverified.",
     "OnlineStatus": "Unverified",
     "NativeDisplayRun": {
       "Resolution": [
@@ -390,7 +393,235 @@
       ],
       "PendingFixesDeployed": false,
       "StabilityValidated": false,
-      "FinalBenchmark": false
+      "FinalBenchmark": false,
+      "HistoricalRun": true,
+      "PendingFixesStatusScope": "Status at the historical PID35412 failure; later candidate deployment is recorded separately."
+    },
+    "NativeNrOffComparison": {
+      "TestProcessId": 14940,
+      "EvidenceDirectory": "diagnostics/native-5120-nr-off-effects-high",
+      "PlayerLog": "diagnostics/Player-D3D11-20261030-222222-807.log",
+      "Resolution": [
+        5120,
+        1440
+      ],
+      "Mode": "Borderless",
+      "Upscaling": "DLAA",
+      "RequestedMultiplier": 4,
+      "NeuralRendering": false,
+      "UltraObservedRenderedFpsRange": [
+        56.2,
+        56.5
+      ],
+      "UltraObservedDXGIPresentCallsPerSecondApproximately": 225,
+      "ShadowsAndVolumetrics": "High",
+      "HighEffectsObservedRenderedFpsRange": [
+        56.8,
+        56.9
+      ],
+      "HighEffectsObservedDXGIPresentCallsPerSecondApproximately": 227,
+      "Conclusion": "Short scene comparison established no meaningful performance gain; not a final benchmark or physical-panel scanout measurement.",
+      "NormalClose": true,
+      "WholePairedLogValidationPassed": true,
+      "NewCandidatesTested": false,
+      "StabilityValidated": false
+    },
+    "MenuFenceAndHudlessFollowUp": {
+      "TestProcessId": 38116,
+      "BackendSHA256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+      "PlayerLog": "diagnostics/Player-D3D11-20261030-223732-014.log",
+      "Resolution": [
+        5120,
+        1440
+      ],
+      "NeuralRendering": true,
+      "MenuInteraction": "Open with tab interaction",
+      "FullPairedLogValidationPending": false,
+      "LateHudlessAcceptedApproximately": 36498,
+      "LateHudlessStartupRejects": 9,
+      "HudlessPixelsCorrect": false,
+      "HudlessDefects": [
+        "Vertically flipped"
+      ],
+      "NativeBoundRtvFormat": 10,
+      "NativeBoundMatchesCapture": false,
+      "CauseEstablished": false,
+      "StabilityValidated": false,
+      "Status": "Historical bounded 23-minute run passed complete paired logs and normal close, but its capture orientation was wrong. Subsequent E841 capture proof and final normal-backend smoke passed separately.",
+      "PostReturnRenderedFps": 57.26,
+      "PlayerDeviceErrors": 0,
+      "PostReturnDXGIPresentCallsPerSecond": 228.7,
+      "RejectExplanation": "Deliberate FG-off periods; no ongoing increase once FG resumed",
+      "BackendDeviceErrors": 0,
+      "ColorDepthMismatches": 0,
+      "MenuInteractions": "Opened and used tabs; NR and FG toggled repeatedly; over six minutes with FG enabled",
+      "EvidenceDirectory": "diagnostics/native-5120-menu-fence-571c-hudless",
+      "ColorComparison": "Subsequent raw-buffer comparison in PID 9808 confirmed matching static-scene color after analysis-only Y alignment; no additional sRGB conversion needed.",
+      "LateHudlessRejectedTotalObserved": 31212,
+      "FullPairedLogValidationPassed": true,
+      "NormalClose": true,
+      "PostReturnNeuralRendering": false,
+      "RenderTargetErrors": 0,
+      "BorderlessAltTabReturnPassed": true,
+      "DurationMinutesApproximately": 23,
+      "RawCapture": "hudless-38116-epoch10-frame13232.bmp",
+      "PostReturnRequestedMultiplier": 4,
+      "FgEnabledTestDurationSecondsAtLeast": 360
+    },
+    "RawCaptureColorComparison": {
+      "TestProcessId": 9808,
+      "EvidenceDirectory": "diagnostics/native-5120-raw-color-comparison-9808",
+      "PlayerLog": "diagnostics/Player-D3D11-20261030-230316-786.log",
+      "DiagnosticBackendSHA256": "A9F3C908FC3DDD033EC53142BF7A18B5E209FBA406D178DD809D5C7E5DE635D9",
+      "ManagedSHA256": "2101D9733A492791F63F801FB99A1A5D6D12F914023D375577C0D34A14765562",
+      "NativeSHA256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+      "AlignmentForAnalysisOnly": "Y inversion",
+      "StaticStoneSamples": 8750,
+      "StaticStoneMeanAbsoluteError8Bit": 0.45,
+      "SecondStaticRegionMeanAbsoluteError8Bit": 0.632,
+      "AdditionalSrgbTransformMeanAbsoluteError8BitRange": [
+        62,
+        67
+      ],
+      "ColorAgreementVerifiedForComparedRegions": true,
+      "AdditionalColorConversionNeeded": false,
+      "OrientationCorrect": false,
+      "NormalClose": true,
+      "WholePairedLogValidationPassed": true,
+      "RenderTargetErrors": 0,
+      "ColorDepthMismatches": 0,
+      "PlayerDeviceErrors": 0,
+      "BackendDeviceErrors": 0,
+      "PerformanceBenchmark": false,
+      "NextStep": "E841 explicit CopyStd mesh inversion subsequently passed upright/color/UI-omission comparison in PID 14176."
+    },
+    "CorrectedHudlessCapture": {
+      "TestProcessId": 14176,
+      "Location": "Old Road",
+      "Resolution": [
+        5120,
+        1440
+      ],
+      "NeuralRendering": false,
+      "RequestedMultiplier": 4,
+      "ManagedSHA256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+      "NativeSHA256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+      "DiagnosticBackendSHA256": "A9F3C908FC3DDD033EC53142BF7A18B5E209FBA406D178DD809D5C7E5DE635D9",
+      "Report": "docs/validation/hudless-color-14176.json",
+      "LocalReport": "diagnostics/raw-color-comparison-14176.json",
+      "OrientationCorrect": true,
+      "ComparedSceneColorsMatch": true,
+      "MeanAbsoluteError8Bit": [
+        0.465524,
+        0.649444,
+        0.453423
+      ],
+      "Comparison": "Same coordinates; no analytical Y correction; sequential captures approximately one second apart",
+      "UiVisiblyOmitted": [
+        "Health/mana orbs",
+        "Ability bar and instruction panel",
+        "Minimap and quest text",
+        "Player overhead health bar"
+      ],
+      "AdditionalGammaConversionRequired": false,
+      "Scope": "One stationary Old Road scene; does not establish every menu/camera/combat state, artifact-free generated UI, or broad stability",
+      "FullPairedLogValidationPending": false,
+      "EvidenceDirectory": "diagnostics/native-5120-explicit-capture-14176",
+      "PerformanceClaim": "Provisional same-scene observations using diagnostic backend, not final benchmarks or physical-panel FPS",
+      "LateHudlessAccepted": 37073,
+      "RenderTargetErrors": 0,
+      "NrOffClosedMenuRenderedFpsApproximately": 56.14,
+      "PlayerLog": "diagnostics/Player-D3D11-20261030-231317-030.log",
+      "FullPairedLogValidationPassed": true,
+      "NormalClose": true,
+      "ColorDepthMismatches": 0,
+      "LateHudlessRejected": 9,
+      "Rejections": "Startup count stayed constant",
+      "NrOffClosedMenuDXGIPresentCallsPerSecondApproximately": 224,
+      "NrOnClosedMenuDXGIPresentCallsPerSecondApproximately": 196,
+      "BackendDeviceErrors": 0,
+      "PlayerDeviceErrors": 0,
+      "NrOnClosedMenuRenderedFpsApproximately": 48.98,
+      "NeuralRenderingOnComparison": {
+        "WorkingScale": 0.5,
+        "WorkingDimensions": [
+          2560,
+          720
+        ],
+        "Report": "docs/validation/hudless-color-14176-nr-on.json",
+        "OrientationCorrect": true,
+        "ComparedSceneColorsMatch": true,
+        "UiOmissionsRemainVerified": true,
+        "MeanAbsoluteError8Bit": [
+          0.786057,
+          1.098444,
+          0.544012
+        ],
+        "StaticStoneOnOffDifferenceMeanAbsoluteError8Bit": [
+          9.305981,
+          10.648667
+        ],
+        "Interpretation": "NR on/off difference exceeds same-condition capture noise in the compared static regions; runtime model evidence is separate",
+        "AdditionalGammaConversionRequired": false,
+        "LoggedIntegrationCostMilliseconds": 0.43,
+        "ActualModelCompositionEvidence": "diagnostics/native-5120-explicit-capture-14176/OptiScaler.log",
+        "CompositionTime": "12:20:01.063488",
+        "Benchmark": false,
+        "LoggedPassCostMillisecondsRange": [
+          2.46,
+          2.48
+        ],
+        "LoggedModelCostMillisecondsRange": [
+          2.03,
+          2.05
+        ],
+        "CompositionLine": 5065
+      }
+    },
+    "CurrentInstalledConfiguration": {
+      "ManagedSHA256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+      "NativeSHA256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+      "BackendSHA256": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+      "InstalledHashesVerified": true,
+      "Profile": "DLAA",
+      "Multiplier": 4,
+      "NeuralRendering": false,
+      "NeuralRenderingScale": 0.5,
+      "LateHudless": true,
+      "DiagnosticCaptureEnvironmentCleared": true,
+      "RegularSmokeTestProcessId": 7236,
+      "RegularSmokePlayerLog": "diagnostics/Player-D3D11-20261030-232734-696.log",
+      "RegularSmokeResult": "Passed; normal close",
+      "ColorDepthMismatches": 0,
+      "ObservedRenderedFpsRange": [
+        55.95,
+        56.13
+      ],
+      "NativeEvaluations": 8569,
+      "BroadStabilityValidated": false,
+      "LateHudlessRejected": 9,
+      "PhysicalPanelScanoutsMeasured": false,
+      "UniqueGeneratedImagesProvenByCounters": false,
+      "VerifyPixels": false,
+      "LateHudlessAccepted": 8559,
+      "Rejections": "Startup count stayed constant",
+      "Target240FpsAchieved": false,
+      "ObservedDXGIPresentCallsPerSecondRange": [
+        224.3,
+        224.5
+      ],
+      "MenuOpenedAndClosed": true,
+      "CallsPerClient": 4.0,
+      "BackendDeviceErrors": 0,
+      "PlayerDeviceErrors": 0,
+      "FullPairedLogValidationPassed": true,
+      "NormalClose": true,
+      "FullWidthHudVisible": true,
+      "RenderTargetErrors": 0,
+      "NativeRejects": 0,
+      "RegularSmokeEvidenceDirectory": "diagnostics/native-5120-final-e841-571c-7236",
+      "NeuralRenderingApplyModel": true,
+      "GameLeftClosed": true
     }
   }
 }

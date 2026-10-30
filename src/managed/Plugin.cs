@@ -703,12 +703,14 @@ public sealed class Plugin : BasePlugin
         private readonly CommandBuffer hudlessCommands;
         private readonly Mesh displayTriangle;
         private readonly MaterialPropertyBlock displayProperties;
+        private readonly MaterialPropertyBlock hudlessProperties;
         private GameObject? displayObject;
         private Camera? displayCamera, displayOwner;
         private bool targetApplied;
         internal RenderTexture? SceneTarget;
         internal RenderTexture Color = null!, Depth = null!, Motion = null!, Output = null!, Presented = null!;
         internal RenderTexture Hudless = null!;
+        private RenderTexture hudlessScratch = null!;
         internal IntPtr HudlessPtr;
         internal ulong HudlessSubmissions;
         internal int HudlessCaptureFrame = -1;
@@ -817,6 +819,7 @@ public sealed class Plugin : BasePlugin
             displayTriangle.uv = new Vector2[] { new(0, 0), new(0, 2), new(2, 0) };
             displayTriangle.triangles = new int[] { 0, 1, 2 };
             displayProperties = new MaterialPropertyBlock();
+            hudlessProperties = new MaterialPropertyBlock();
             UpdateDisplayOwner();
         }
 
@@ -898,6 +901,7 @@ public sealed class Plugin : BasePlugin
                 if (SceneTarget != null || InputWidth != outputWidth || InputHeight != outputHeight)
                     throw new InvalidOperationException("Native-resolution HUDless capture requires matching camera/display dimensions");
                 EnsureHudless(outputWidth, outputHeight, QualitySettings.activeColorSpace == ColorSpace.Linear);
+                EnsureHudlessScratch(outputWidth, outputHeight, Hudless.sRGB);
                 token = Native.QueueHudless(Camera.GetInstanceID(), Time.frameCount, HudlessPtr);
                 if (token == IntPtr.Zero) return;
                 TrackToken(token);
@@ -905,13 +909,29 @@ public sealed class Plugin : BasePlugin
                 // Resolve CameraTarget at MAIN camera AfterEverything, after its
                 // complete image-effect chain and before later cameras/overlay UI.
                 // Preserve Unity's normal OnRenderImage and presentation path.
-                hudlessCommands.Blit(cameraTarget, new RenderTargetIdentifier(Hudless));
+                // The unscaled CameraTarget copy has verified display-matching
+                // encoded bytes, but is vertically inverted. Blit's scale/offset
+                // overload did not change that orientation in this Unity build.
+                // Copy into an owned texture first, then use the shader's explicit
+                // UV transform through DrawMesh, avoiding the Blit fast path.
+                hudlessCommands.Blit(cameraTarget, new RenderTargetIdentifier(hudlessScratch));
+                hudlessProperties.Clear();
+                hudlessProperties.SetTexture(Shader.PropertyToID("_MainTex"), hudlessScratch);
+                hudlessProperties.SetVector(Shader.PropertyToID("_MainTex_ST"), new Vector4(1, -1, 0, 1));
+                var captureTarget = new RenderTargetIdentifier(Hudless);
+                hudlessCommands.SetRenderTarget(captureTarget);
+                hudlessCommands.SetViewport(new Rect(0, 0, outputWidth, outputHeight));
+                // CopyStd maps our normalized triangle into clip space, applies
+                // the D3D UV convention, then _MainTex_ST. The resulting top row
+                // samples the scratch bottom row. Both textures use the same
+                // sRGB setting; the shader adds no transfer/gamma operation.
+                hudlessCommands.DrawMesh(displayTriangle, Matrix4x4.identity, RuntimeUtilities.copyStdMaterial, 0, 0, hudlessProperties);
                 hudlessCommands.IssuePluginEventAndData(renderEvent, 2, token);
                 hudlessCommands.SetRenderTarget(cameraTarget);
                 hudlessCommands.SetViewport(new Rect(0, 0, outputWidth, outputHeight));
                 HudlessCaptureFrame = Time.frameCount;
                 if (HudlessSubmissions++ % 300 == 0)
-                    Instance.Log.LogInfo($"Main-camera AfterEverything HUDless queued camera={Camera.GetInstanceID()} frame={Time.frameCount} depth={Camera.depth} mask=0x{Camera.cullingMask:X8} capture={Hudless.format} sRGB={Hudless.sRGB} size={outputWidth}x{outputHeight}; engine presentation unchanged. Verify captured content and native acceptance before claiming UI separation.");
+                    Instance.Log.LogInfo($"Main-camera AfterEverything HUDless queued camera={Camera.GetInstanceID()} frame={Time.frameCount} depth={Camera.depth} mask=0x{Camera.cullingMask:X8} capture={Hudless.format} sRGB={Hudless.sRGB} size={outputWidth}x{outputHeight} flipY=explicitCopyStd; engine presentation unchanged. Verify captured content and native acceptance before claiming UI separation.");
             }
             catch (Exception e)
             {
@@ -1028,6 +1048,19 @@ public sealed class Plugin : BasePlugin
             HudlessPtr = Hudless.GetNativeTexturePtr();
         }
 
+        private void EnsureHudlessScratch(int w, int h, bool encodeSrgb)
+        {
+            if (hudlessScratch != null && hudlessScratch.IsCreated() && hudlessScratch.width == w &&
+                hudlessScratch.height == h && hudlessScratch.sRGB == encodeSrgb) return;
+            Retire(hudlessScratch);
+            hudlessScratch = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32,
+                encodeSrgb ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear)
+            { name = "LE encoded camera capture scratch", hideFlags = HideFlags.HideAndDontSave,
+                useMipMap = false, autoGenerateMips = false, antiAliasing = 1, filterMode = FilterMode.Point };
+            if (!hudlessScratch.Create() || hudlessScratch.sRGB != encodeSrgb)
+                throw new InvalidOperationException("Could not create the required SDR capture scratch encoding");
+        }
+
         internal void Restore()
         {
             FinalCommands.Clear();
@@ -1060,7 +1093,7 @@ public sealed class Plugin : BasePlugin
             // The native registry atomically chooses either cancellation or render
             // consumption. An executing callback keeps its own COM references.
             while (queuedTokens.Count > 0) Native.CancelQueuedFrame(queuedTokens.Dequeue());
-            Retire(SceneTarget); Retire(Color); Retire(Depth); Retire(Motion); Retire(Output); Retire(Presented); Retire(Hudless);
+            Retire(SceneTarget); Retire(Color); Retire(Depth); Retire(Motion); Retire(Output); Retire(Presented); Retire(Hudless); Retire(hudlessScratch);
             FinalCommands.Release();
             hudlessCommands.Release();
             UnityEngine.Object.Destroy(displayTriangle);

@@ -1,0 +1,146 @@
+{
+  "processId": 14176,
+  "hudlessNrOn": "hudless-14176-epoch10-frame34387.bmp",
+  "applicationNrOn": "app-present-14176-chain1-frame116598-request134378761309200430.bmp",
+  "hudlessNrOff": "hudless-14176-epoch10-frame15127.bmp",
+  "hudlessSha256": "8641F7979A62B6D0E4F55A958521AE294E98F76B41326B89A5EE6CF55405B668",
+  "applicationSha256": "506D3F9D3F6A7563B5FDDFA66D7546BC2DA32110C859BBF2872623F62AA2BAD3",
+  "resolution": [
+    5120,
+    1440
+  ],
+  "managedSha256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+  "nativeSha256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+  "conditions": "Stationary camera, DLAA4x. NR on at half working width/height. Raw on/on captures within about one second; comparison NR-off capture earlier in same session. Temporal rendering/animation contributes small differences.",
+  "sampling": "Every fourth pixel; RGB byte scale0..255; static patches exclude UI.",
+  "conclusion": "PASS: upright HUDless and raw application color remain matched with NR on. Static NR-on/off differences exceed same-condition temporal/capture noise, supporting visible effect application alongside runtime model evidence. No gamma adjustment.",
+  "visualOmissions": [
+    "health/mana orbs",
+    "ability bar",
+    "minimap and quest text",
+    "player overhead health bar"
+  ],
+  "overlayNote": "Opti overlay is not present in this raw application capture; backend draws it later. Normal game UI is present.",
+  "patches": [
+    {
+      "patch": "upper-left stone",
+      "rectXYWH": [
+        80,
+        80,
+        500,
+        280
+      ],
+      "samples": 8750,
+      "hudlessNrOnMeanRGB": [
+        150.784343,
+        128.621257,
+        92.768114
+      ],
+      "applicationNrOnMeanRGB": [
+        150.7784,
+        128.625257,
+        92.7504
+      ],
+      "hudlessNrOffMeanRGB": [
+        145.6464,
+        118.639886,
+        80.686514
+      ],
+      "captureVsApplicationMAE": 0.786057,
+      "verticalFlipAlternativeMAE": 62.014552,
+      "nrOnVsOffMAE": 9.305981,
+      "captureAgreementWithinOneByteFraction": 0.754057,
+      "nrOnVsOffAnyChannelChangedByAtLeastThreeBytesFraction": 0.979657
+    },
+    {
+      "patch": "left stone",
+      "rectXYWH": [
+        350,
+        500,
+        300,
+        160
+      ],
+      "samples": 3000,
+      "hudlessNrOnMeanRGB": [
+        118.434333,
+        98.052,
+        66.422333
+      ],
+      "applicationNrOnMeanRGB": [
+        117.985333,
+        97.620667,
+        66.06
+      ],
+      "hudlessNrOffMeanRGB": [
+        110.002667,
+        86.055333,
+        56.072
+      ],
+      "captureVsApplicationMAE": 1.098444,
+      "verticalFlipAlternativeMAE": 60.983556,
+      "nrOnVsOffMAE": 10.648667,
+      "captureAgreementWithinOneByteFraction": 0.666667,
+      "nrOnVsOffAnyChannelChangedByAtLeastThreeBytesFraction": 0.960667
+    },
+    {
+      "patch": "off-map sky",
+      "rectXYWH": [
+        80,
+        1000,
+        130,
+        250
+      ],
+      "samples": 2079,
+      "hudlessNrOnMeanRGB": [
+        176.531506,
+        188.153439,
+        192.960558
+      ],
+      "applicationNrOnMeanRGB": [
+        176.086099,
+        187.9519,
+        192.675806
+      ],
+      "hudlessNrOffMeanRGB": [
+        163.543531,
+        188.746032,
+        208.613757
+      ],
+      "captureVsApplicationMAE": 0.544012,
+      "verticalFlipAlternativeMAE": 67.127144,
+      "nrOnVsOffMAE": 9.786596,
+      "captureAgreementWithinOneByteFraction": 0.890813,
+      "nrOnVsOffAnyChannelChangedByAtLeastThreeBytesFraction": 1.0
+    },
+    {
+      "patch": "upper path",
+      "rectXYWH": [
+        2670,
+        35,
+        680,
+        120
+      ],
+      "samples": 5100,
+      "hudlessNrOnMeanRGB": [
+        133.360588,
+        116.370196,
+        82.633922
+      ],
+      "applicationNrOnMeanRGB": [
+        133.168039,
+        116.166863,
+        82.486471
+      ],
+      "hudlessNrOffMeanRGB": [
+        129.535098,
+        109.928824,
+        74.29549
+      ],
+      "captureVsApplicationMAE": 2.517582,
+      "verticalFlipAlternativeMAE": 66.483856,
+      "nrOnVsOffMAE": 9.883464,
+      "captureAgreementWithinOneByteFraction": 0.594118,
+      "nrOnVsOffAnyChannelChangedByAtLeastThreeBytesFraction": 0.955098
+    }
+  ]
+}

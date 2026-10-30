@@ -22,13 +22,16 @@ B913AA7A... DLL tested in the recorded sessions. It includes the explicit late
 HUDless ABI1, independent presentation counters and safe local build recipe.
 Its presence does not make managed final-camera HUDless capture validated.
 
-MENU-FENCE CANDIDATE
+SELECTED MENU-FENCE CANDIDATE
 
 menu-fence/late-hudless.patch is a separate COMPLETE patch against the original
 archive. It includes the presentation-stats changes plus the overlay allocator,
-fence and ImGui upload-lifetime fixes. Candidate DLL identity is 571C93E3...;
-build, export checks and independent review passed, but runtime validation is
-pending and it has not been deployed. menu-fence-only.patch is only the focused
+fence and ImGui upload-lifetime fixes. Selected DLL identity is 571C93E3...;
+build, export checks and independent review passed. A later bounded 23-minute
+native-display runtime test with menu/NR/FG/Alt-Tab interactions and complete
+paired logs also passed; broad stability remains unverified. The staging helper
+selects this variant; staging itself does not establish runtime success.
+menu-fence-only.patch is only the focused
 review delta against the B913 source, not a replacement for the complete patch.
 
 The complete menu-fence patch intentionally excludes the unrelated optional
@@ -37,6 +40,22 @@ and SourceOverride.targets document how the original mixed working tree build
 excluded that experiment; they assume their original vendor build-directory
 layout. A fresh archive plus the complete patch uses the ordinary Build-Local.ps1
 recipe below and needs no source override.
+
+OPTIONAL RAW APPLICATION-CAPTURE DIAGNOSTIC
+
+app-capture/late-hudless.patch is a separate complete 15-file patch, including the
+571C changes plus an opt-in raw D3D11 application-swapchain capture. A9F3C908...
+is a temporary diagnostic build, not the selected default backend. Compilation,
+exports, full-source reconstruction, independent review and five journal fixture
+checks passed; live pixel-comparison validation is recorded separately.
+
+Its SOURCE-NOTICE documents the process environment and explicit request marker,
+two-image limit, original build-directory layout and exact reversible diagnostic
+installation helper. The helper accepts only pinned, journal-owned binaries;
+its local payload folders and DLLs are deliberately excluded from this repository.
+The full patch reconstructs clean source using the recipe below. The extra source
+translation unit and override recipe preserve the original mixed-tree build.
+Capturing can stall the application briefly; this is not a performance build.
 
 RECONSTRUCTION RECIPE (POWERSHELL, FROM REPOSITORY ROOT)
 
@@ -68,7 +87,8 @@ directory such as vendor/rebuild-menu-fence, and output local-build-menu-fence.
 Use a clean archive for each variant. The Git ceiling is important: otherwise a
 source directory nested inside this checkout can inherit the parent repository
 and git apply can skip paths. core.autocrlf=false preserves the patch's source
-bytes; the candidate manifest provides hashes for all 14 changed files.
+bytes. The menu-fence manifest provides hashes for its 14 changed files; the
+app-capture manifest covers its separate complete set of 15 changed files.
 
 The patch itself supplies Build-Local.ps1. It selects VS2022 v143, embedded
 compiler symbols and bounded parallelism, generates the build-date headers, and
@@ -77,6 +97,25 @@ required exports, ABI and validation evidence. Build-date/toolchain differences
 can change the resulting DLL hash. Review and validate a rebuilt DLL before
 updating approval pins or staging it; the existing helper intentionally rejects
 unrecognized binaries. A successful build is not a runtime compatibility test.
+
+PROMOTING A REVIEWED REBUILD TO STAGING
+
+The reconstruction directory above is isolated. Stage-LocalBackend.ps1 instead
+looks under vendor/optiscaler-local/local-build-menu-fence for OptiScaler.dll and
+seven exact provenance files: late-hudless.patch, menu-fence-only.patch,
+SOURCE-NOTICE.txt, LICENSE, variant-manifest.json, Build-Candidate.ps1 and
+SourceOverride.targets. A new build directory does not provide those artifacts
+automatically, and changing only the DLL approval hash is insufficient.
+
+After reviewing/testing a rebuild, prepare its corresponding artifact directory
+at that expected path, with the DLL plus matching full-source patch, notices,
+license, manifest and recipes. If any bytes differ from the existing pinned
+variant, record the new DLL/provenance hashes and results in a separate reviewed
+variant; update the selected definition and all affected artifact pins in
+scripts/LocalBackend.ps1 together. Preserve the original pinned variant as
+historical evidence. Do not silently relabel a new build with an old manifest.
+Run the staging helper's -WhatIf checks before staging. Staging still does not
+install the backend into the game.
 
 Recorded build warnings include C4744 (atomic shared_ptr alignment in unchanged
 upstream code) and LNK4098 (mixed CRT defaults in upstream libraries). These are

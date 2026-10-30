@@ -1,16 +1,21 @@
 # Shared static identity checks. Never load the DLL to inspect its exports.
 function Get-LocalBackendDefinition {
     [pscustomobject]@{
-        DllSha256 = 'B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7'
+        DllSha256 = '571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6'
+        PreviousDllSha256 = 'B913AA7A90A2C0928524671EA34BAB3A2537345F44EE48CEC96739925F2528B7'
         LegacyDllSha256 = '34AF48543B5EDFEBAE8D45807F6E05139B2C1B055361FC1B4C8B70079AD56210'
-        BuildDirectoryName = 'local-build-presentation'
+        BuildDirectoryName = 'local-build-menu-fence'
+        Variant = 'LastEpoch-late-hudless-ABI1-presentation-stats-V1-menu-fence'
         OfficialSha256 = 'AD143C5BD6E5FAB4D1ABD8B048C424E9DDCEABF1A864E0E0695C01A0DC82B4C9'
         SourceSha256 = '1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507'
         Documents = @(
-            @{ Name='late-hudless.patch'; SHA256='1D6745F0FD42E74D2155BB4C184EF49C5DA7505163D4DD9DB5DDA99B8AD7538C' },
-            @{ Name='SOURCE-NOTICE.txt'; SHA256='7C5803674A4D9DBCDAC81B9A1138E0A8F7DBC2871319A09349FB41AE912DFDCA' },
+            @{ Name='late-hudless.patch'; SHA256='53E3ED17C77CB12BF7710BEE540A8EF40F47DBA99EAEBD33325D29C78A196958' },
+            @{ Name='menu-fence-only.patch'; SHA256='445E3CDF2FF7EE7A2901A930460BC213BD4E344E0EB57C1621AB3E3746208A95' },
+            @{ Name='SOURCE-NOTICE.txt'; SHA256='80F4E33A4594DA1FA5469E08A94BFD63385F80FAD4862482EFEE78D47F79B1ED' },
             @{ Name='LICENSE'; SHA256='230184F60BAE2FEAF244F10A8BAC053C8FF33A183BCC365B4D8B876D2B7F4809' },
-            @{ Name='variant-manifest.json'; SHA256='E0C7B975330C02665EF6C07380AA4060A3B372836AA3276EF1036DB9BF9CDB90' }
+            @{ Name='variant-manifest.json'; SHA256='B380DC9DD0BBF834063E74904E247A2AE053B61F32408BA4DC98E02DD04C52CE' },
+            @{ Name='Build-Candidate.ps1'; SHA256='981E71C63935F0BB14EDAE63AFDBAD0091F6E1552558F3231138749BB3CDD5AF' },
+            @{ Name='SourceOverride.targets'; SHA256='3BB3884C081F870ABEF9ADEC490EA9D6995FF76799A560A1BBAF3C96196189F8' }
         )
         Exports = @('OptiScaler_GetHudlessD3D11Version','OptiScaler_GetHudlessFrameTokenD3D11','OptiScaler_SubmitHudlessD3D11','OptiScaler_GetPresentationStatsV1')
     }
@@ -27,7 +32,7 @@ function Assert-RecognizedLocalBackend([string]$Path) {
     Assert-NoReparsePoint $Path
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Required backend file is missing: $Path" }
     $actualHash = Get-FileSha256 $Path
-    if ($actualHash -eq $definition.DllSha256) { $requiredExports = $definition.Exports }
+    if ($actualHash -in @($definition.DllSha256, $definition.PreviousDllSha256)) { $requiredExports = $definition.Exports }
     elseif ($actualHash -eq $definition.LegacyDllSha256) { $requiredExports = $definition.Exports[0..2] }
     else { throw "Unrecognized backend file or changed build: $Path" }
     $bytes = [IO.File]::ReadAllBytes($Path)

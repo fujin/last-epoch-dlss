@@ -21,8 +21,8 @@ $fallback = Get-SafeChildPath $projectRoot 'vendor\backend-fallback\OptiScaler-1
 if (Test-Path -LiteralPath $fallback) { Assert-BackendFileHash $fallback $definition.OfficialSha256 }
 $targetDll = Get-SafeChildPath $stageRoot 'version.dll'
 if (Test-Path -LiteralPath $targetDll) {
-    if ((Get-FileSha256 $targetDll) -notin @($definition.DllSha256, $definition.LegacyDllSha256, $definition.OfficialSha256)) {
-        throw 'The staged version.dll is neither the pinned official backend nor this local variant.'
+    if ((Get-FileSha256 $targetDll) -notin @($definition.DllSha256, $definition.PreviousDllSha256, $definition.LegacyDllSha256, $definition.OfficialSha256)) {
+        throw 'The staged version.dll is not a pinned official, selected, or recognized previous local backend.'
     }
 }
 $copies = @()
@@ -32,7 +32,11 @@ foreach ($document in $definition.Documents) {
     $copies += [pscustomobject]@{ Source=$source; Target=(Get-SafeChildPath $stageRoot ('docs\local-backend\' + $document.Name)); Hash=$document.SHA256 }
 }
 $manifest = Get-Content -LiteralPath (Get-SafeChildPath $localRoot 'variant-manifest.json') -Raw | ConvertFrom-Json
-if ($manifest.ApiVersion -ne 1 -or $manifest.DllSha256 -ne $definition.DllSha256 -or $manifest.BaseSourceArchiveSha256 -ne $definition.SourceSha256) {
+$fullPatch = @($definition.Documents | Where-Object Name -eq 'late-hudless.patch')[0]
+if ($manifest.ApiVersion -ne 1 -or $manifest.PresentationStatsApiVersion -ne 1 -or $manifest.PresentationStatsBytes -ne 96 -or
+    $manifest.Variant -ne $definition.Variant -or $manifest.DllSha256 -ne $definition.DllSha256 -or
+    $manifest.BaseSourceArchiveSha256 -ne $definition.SourceSha256 -or $manifest.BaselineDllSha256 -ne $definition.PreviousDllSha256 -or
+    $manifest.Patch -ne $fullPatch.Name -or $manifest.PatchSha256 -ne $fullPatch.SHA256) {
     throw 'Local variant manifest does not describe the pinned source and binary.'
 }
 # All source, binary, documentation, fallback and destination checks precede writes.

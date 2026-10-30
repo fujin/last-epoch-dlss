@@ -7,11 +7,14 @@ generated interop, user saves, raw diagnostics, credentials, runtime DLLs/models
 download archives, tools, build outputs, staging and the expanded vendor trees.
 
 Read README.txt before running anything. The tested 1600x900 DLAA/FG/NR behavior
-does not establish native-ultrawide stability: the 5120x1440 test suffered a GPU
-device hang after opening the backend menu. Reduced-resolution SR is unsupported.
-The current native/managed source also includes a newly built final-camera
-HUDless candidate; successful capture still requires runtime proof. Compilation
-and WARP tests do not establish visual correctness.
+does not establish native-ultrawide stability: the earlier 5120x1440 test suffered
+a GPU device hang after opening the backend menu. The 571C fix passed a bounded
+23-minute follow-up with clean complete logs; broad stability is still unverified.
+Reduced-resolution SR is unsupported.
+The current native/managed source includes the E841 final-camera capture, whose
+orientation, static-scene color and listed UI omissions passed a direct raw-buffer
+comparison in Old Road. That scene-specific proof does not cover every game/UI
+state. Compilation and WARP tests alone do not establish visual correctness.
 
 LOCAL PREREQUISITES FOR A FRESH CLONE
 
@@ -64,6 +67,11 @@ resolve repository paths. A manifest's DLL hash identifies the tested artifact;
 it does not imply that a binary is included in Git or that an untested candidate
 has been deployed. Generated build-date headers also prevent a blanket claim of
 bit-identical rebuilt DLLs across machines or build times.
+
+The hash-pinned variant manifests and source notices preserve their original
+build-time status. Current selection and later runtime evidence are recorded in
+packaging\backend-plan.json, packaging\source-candidates.json and README.txt;
+later tests do not rewrite the original provenance artifacts.
 
 The deployment journal, original installation backups and interop backups are
 local-only and must be retained for restoration. This Git repository does not

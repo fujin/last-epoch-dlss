@@ -1,0 +1,206 @@
+{
+  "processId": 14176,
+  "hudless": "hudless-14176-epoch10-frame15127.bmp",
+  "application": "app-present-14176-chain1-frame39564-request134378757871988009.bmp",
+  "hudlessSha256": "56D48E149FE0284FBCDB2A42C367E417545F6CF905A3353BB996C9DCABE34FFA",
+  "applicationSha256": "8D38CFC0BD0249A68BE7E0E4A7DDA1933240BCC6E886ED0556CA803767F36415",
+  "resolution": [
+    5120,
+    1440
+  ],
+  "managedSha256": "E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F",
+  "nativeSha256": "257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4",
+  "conditions": "Stationary camera, NR off, DLAA4x. Raw BMPs captured sequentially about one second apart; moving foliage/character differences expected.",
+  "sampling": "Every fourth pixel; RGB byte scale0..255. Scene rectangles exclude UI. UI differences are supported by visual inspection, not interpreted as color errors.",
+  "conclusion": "PASS for this scene: correct upright orientation, display-matching encoded scene color, visible UI omitted from HUDless. No gamma adjustment required.",
+  "visualOmissions": [
+    "health/mana orbs",
+    "ability bar and instruction panel",
+    "minimap and quest text",
+    "player overhead health bar"
+  ],
+  "patches": [
+    {
+      "patch": "upper-left stone",
+      "category": "scene",
+      "rectXYWH": [
+        80,
+        80,
+        500,
+        280
+      ],
+      "samples": 8750,
+      "hudlessMeanRGB": [
+        145.6464,
+        118.639886,
+        80.686514
+      ],
+      "applicationMeanRGB": [
+        145.650743,
+        118.641029,
+        80.684229
+      ],
+      "sameCoordinatesMAE": 0.465524,
+      "verticalFlipAlternativeMAE": 60.195924,
+      "extraSrgbEncodeMAE": 61.680663,
+      "allChannelsWithinOneByteFraction": 0.958514,
+      "exactRgbFraction": 0.288914
+    },
+    {
+      "patch": "left stone",
+      "category": "scene",
+      "rectXYWH": [
+        350,
+        500,
+        300,
+        160
+      ],
+      "samples": 3000,
+      "hudlessMeanRGB": [
+        110.002667,
+        86.055333,
+        56.072
+      ],
+      "applicationMeanRGB": [
+        110.034667,
+        86.100333,
+        56.088
+      ],
+      "sameCoordinatesMAE": 0.649444,
+      "verticalFlipAlternativeMAE": 60.471667,
+      "extraSrgbEncodeMAE": 67.158619,
+      "allChannelsWithinOneByteFraction": 0.930667,
+      "exactRgbFraction": 0.298
+    },
+    {
+      "patch": "off-map sky",
+      "category": "scene",
+      "rectXYWH": [
+        80,
+        1000,
+        130,
+        250
+      ],
+      "samples": 2079,
+      "hudlessMeanRGB": [
+        163.543531,
+        188.746032,
+        208.613757
+      ],
+      "applicationMeanRGB": [
+        163.566619,
+        188.777778,
+        208.641655
+      ],
+      "sameCoordinatesMAE": 0.453423,
+      "verticalFlipAlternativeMAE": 79.085618,
+      "extraSrgbEncodeMAE": 35.088775,
+      "allChannelsWithinOneByteFraction": 0.963925,
+      "exactRgbFraction": 0.301587
+    },
+    {
+      "patch": "upper path",
+      "category": "scene",
+      "rectXYWH": [
+        2670,
+        35,
+        680,
+        120
+      ],
+      "samples": 5100,
+      "hudlessMeanRGB": [
+        129.535098,
+        109.928824,
+        74.29549
+      ],
+      "applicationMeanRGB": [
+        129.607255,
+        109.984706,
+        74.296078
+      ],
+      "sameCoordinatesMAE": 1.490588,
+      "verticalFlipAlternativeMAE": 57.940588,
+      "extraSrgbEncodeMAE": 62.65887,
+      "allChannelsWithinOneByteFraction": 0.802941,
+      "exactRgbFraction": 0.267059
+    },
+    {
+      "patch": "minimap",
+      "category": "UI",
+      "rectXYWH": [
+        4700,
+        80,
+        350,
+        350
+      ],
+      "samples": 7744,
+      "hudlessMeanRGB": [
+        106.676524,
+        112.118802,
+        53.44499
+      ],
+      "applicationMeanRGB": [
+        39.164127,
+        38.38094,
+        29.416064
+      ],
+      "sameCoordinatesMAE": 58.310003,
+      "verticalFlipAlternativeMAE": 40.536975,
+      "extraSrgbEncodeMAE": 119.476784,
+      "allChannelsWithinOneByteFraction": 0.0,
+      "exactRgbFraction": 0.0
+    },
+    {
+      "patch": "health orb",
+      "category": "UI",
+      "rectXYWH": [
+        1800,
+        1240,
+        100,
+        90
+      ],
+      "samples": 575,
+      "hudlessMeanRGB": [
+        98.509565,
+        96.373913,
+        40.869565
+      ],
+      "applicationMeanRGB": [
+        65.553043,
+        9.846957,
+        9.107826
+      ],
+      "sameCoordinatesMAE": 59.312464,
+      "verticalFlipAlternativeMAE": 36.406957,
+      "extraSrgbEncodeMAE": 120.960514,
+      "allChannelsWithinOneByteFraction": 0.0,
+      "exactRgbFraction": 0.0
+    },
+    {
+      "patch": "ability bar",
+      "category": "UI",
+      "rectXYWH": [
+        2260,
+        1320,
+        570,
+        70
+      ],
+      "samples": 2574,
+      "hudlessMeanRGB": [
+        80.761461,
+        78.048563,
+        32.817793
+      ],
+      "applicationMeanRGB": [
+        54.905206,
+        45.992618,
+        48.135198
+      ],
+      "sameCoordinatesMAE": 55.549728,
+      "verticalFlipAlternativeMAE": 50.494043,
+      "extraSrgbEncodeMAE": 97.119673,
+      "allChannelsWithinOneByteFraction": 0.0,
+      "exactRgbFraction": 0.0
+    }
+  ]
+}
