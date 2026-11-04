@@ -166,6 +166,15 @@ Evidence:
   diagnostics\Player-D3D11-20261030-232734-696.log
     Complete Unity log for the final test; all checked error counts zero.
 
+RELEASE READINESS AND OFFLINE CHECKS
+
+Public-alpha scope, release gates and issue work that can proceed without
+starting Last Epoch are recorded in docs\public-release-plan.txt.
+.github\workflows\offline-checks.yml builds the native bridge without proprietary
+SDKs, runs its software-D3D11 contract, and checks isolated install/restore
+fixtures. Passing these checks does not validate Unity rendering, DLSS, FG, NR
+or end-to-end latency. The workflow does not deploy into the game.
+
 SOURCE REPOSITORY
 
 This checkout excludes downloaded runtimes, game files, local diagnostics and

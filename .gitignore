@@ -2,6 +2,12 @@
 /*
 !/.gitignore
 !/.gitattributes
+# Expose only the reviewed offline workflow within GitHub metadata.
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/offline-checks.yml
 !/README.txt
 !/REPOSITORY.txt
 !/NOTICE

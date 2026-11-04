@@ -1,0 +1,41 @@
+name: Offline checks
+
+'on':
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-and-deployment:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure native bridge without proprietary SDKs
+        run: >-
+          cmake -S src/native -B build/offline-checks
+          -G "Visual Studio 17 2022" -A x64
+          -DLE_BUILD_SMOKE=ON -DLE_BUILD_NGX=OFF -DSTREAMLINE_ROOT:PATH=
+
+      - name: Build native bridge and software contract test
+        run: cmake --build build/offline-checks --config Release --parallel 2
+
+      # WARP tests ABI/resource handling and missing-backend behavior only.
+      # It does not execute DLSS, frame generation, NR or the game.
+      - name: Test WARP software contract
+        run: >-
+          ctest --test-dir build/offline-checks -C Release
+          --output-on-failure --no-tests=error --timeout 120
+
+      - name: Test deployment and restoration in isolated fixtures
+        run: .\scripts\Test-Deployment.ps1

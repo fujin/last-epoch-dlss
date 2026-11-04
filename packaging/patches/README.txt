@@ -1,7 +1,8 @@
 COMPLETE CORRESPONDING OPTISCALER SOURCE
 =======================================
 
-Each variant directory contains a complete patch against the same pinned base,
+The presentation-stats, menu-fence and app-capture variant directories each
+contain a complete patch against the same pinned base,
 the original GPL-3.0 LICENSE, source notice and a hash manifest. No DLL is included.
 Do not apply two complete variant patches on top of one another.
 
@@ -56,6 +57,20 @@ its local payload folders and DLLs are deliberately excluded from this repositor
 The full patch reconstructs clean source using the recipe below. The extra source
 translation unit and override recipe preserve the original mixed-tree build.
 Capturing can stall the application briefly; this is not a performance build.
+
+EXPERIMENTAL FALLBACK-LIMITER DELTA
+
+fallback-limiter/fallback-limiter-only.patch is an UNSELECTED source candidate,
+and is the exception to the complete-variant layout above. Apply it only AFTER
+the complete menu-fence patch. It replaces the fallback limiter's fixed 2x
+assumption with an explicit configured output multiplier. It does not change
+the native Reflex limiter, and does not establish lower end-to-end latency.
+
+fallback-limiter/Test-Candidate.ps1 reconstructs just the upstream files needed
+for this delta and compiles tests against its actual production policy header.
+It does not build a complete backend DLL, run its timer, install anything or
+launch the game. Full-backend build and runtime validation remain pending.
+See fallback-limiter/README.txt and candidate-manifest.json before using it.
 
 RECONSTRUCTION RECIPE (POWERSHELL, FROM REPOSITORY ROOT)
 

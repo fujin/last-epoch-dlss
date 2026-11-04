@@ -1,0 +1,34 @@
+{
+  "Variant": "fallback-limiter-multiplier-source-candidate",
+  "Status": "Unselected source-only candidate; runtime validation pending",
+  "BaseRepository": "https://github.com/Skynizz/optiscaler-dlss5",
+  "BaseCommit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
+  "BaseSourceArchiveSha256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
+  "PrerequisiteVariant": "menu-fence",
+  "PrerequisiteDllIdentity": "571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6",
+  "PrerequisiteCompletePatchSha256": "53E3ED17C77CB12BF7710BEE540A8EF40F47DBA99EAEBD33325D29C78A196958",
+  "Patch": "fallback-limiter-only.patch",
+  "PatchKind": "Focused delta against reconstructed 571C source; not a complete base-archive patch",
+  "PatchSha256": "54A29549EE06AA2F4DCE548AA356BDB3E9331200E8646A7130F2A057233C2DEC",
+  "Dll": null,
+  "SelectedBackendChanged": false,
+  "NativeReflexPathChanged": false,
+  "DynamicMfgPolicy": "Configured maximum is a conservative cap policy, not actual displayed frame count",
+  "ProductionFiles": [
+    "OptiScaler/misc/FrameLimit.cpp",
+    "OptiScaler/misc/FrameLimit.h",
+    "OptiScaler/hooks/FG_Hooks.cpp",
+    "OptiScaler/wrapped/wrapped_swapchain.cpp",
+    "OptiScaler/hooks/Vulkan_Hooks.cpp",
+    "OptiScaler/misc/FrameLimitPolicy.h"
+  ],
+  "OfflineValidation": {
+    "Result": "PASS",
+    "Checks": 38,
+    "Compiler": "MSVC v143, x64 Release, C++17, /W4 /WX",
+    "Reconstruction": "Five source files from pinned archive, verified 571C hook, then candidate delta",
+    "ProductionHelperSha256": "F7701869AB6F56C6D2052D97561D4D02BB5270580096F5295936016D4E84FF44",
+    "FullBackendBuilt": false,
+    "RuntimeValidated": false
+  }
+}

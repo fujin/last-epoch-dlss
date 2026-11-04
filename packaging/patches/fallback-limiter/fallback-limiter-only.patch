@@ -1,0 +1,123 @@
+diff --git a/OptiScaler/hooks/FG_Hooks.cpp b/OptiScaler/hooks/FG_Hooks.cpp
+index 2ad1047..af03b11 100644
+--- a/OptiScaler/hooks/FG_Hooks.cpp
++++ b/OptiScaler/hooks/FG_Hooks.cpp
+@@ -1357,7 +1357,9 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
+     if (willPresent && !state.reflexLimitsFps && state.activeFgOutput != FGOutput::NoFG &&
+         !IdentifyGpu::getPrimaryGpu().usesDxvk && !XellHooks::canLimit())
+     {
+-        FrameLimit::sleep(fg != nullptr ? fg->IsActive() && !fg->IsPaused() : false);
++        FrameLimit::sleep(FrameLimitPolicy::OutputMultiplier(
++            fg != nullptr && fg->IsActive() && !fg->IsPaused(),
++            fg != nullptr ? fg->GetInterpolatedFrameCount() : 0));
+     }
+ 
+     if ((config->SimulateWaitableObject.value_or_default() ||
+diff --git a/OptiScaler/hooks/Vulkan_Hooks.cpp b/OptiScaler/hooks/Vulkan_Hooks.cpp
+index 997d638..f9f938c 100644
+--- a/OptiScaler/hooks/Vulkan_Hooks.cpp
++++ b/OptiScaler/hooks/Vulkan_Hooks.cpp
+@@ -338,7 +338,7 @@ static VkResult hkvkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPres
+ 
+     // Unsure about Vulkan Reflex fps limit and if that could be causing an issue here
+     if (!State::Instance().reflexLimitsFps)
+-        FrameLimit::sleep(false);
++        FrameLimit::sleep(1);
+ 
+     LOG_FUNC_RESULT(result);
+     return result;
+diff --git a/OptiScaler/misc/FrameLimit.cpp b/OptiScaler/misc/FrameLimit.cpp
+index b240a3f..171c719 100644
+--- a/OptiScaler/misc/FrameLimit.cpp
++++ b/OptiScaler/misc/FrameLimit.cpp
+@@ -51,15 +51,12 @@ inline int FrameLimit::combined_sleep(int64_t ns)
+     return status;
+ }
+ 
+-void FrameLimit::sleep(bool fgActive)
++void FrameLimit::sleep(std::uint64_t outputFramesPerRenderedFrame)
+ {
+-    if (auto fpsCap = Config::Instance()->FramerateLimit.value_or_default(); fpsCap != 0.0f)
++    if (const auto min_interval_us = FrameLimitPolicy::MinimumIntervalUs(
++            Config::Instance()->FramerateLimit.value_or_default(), outputFramesPerRenderedFrame);
++        min_interval_us != 0)
+     {
+-        uint64_t min_interval_us = std::clamp((uint64_t) (1'000'000 / fpsCap), 0ULL, 100'000'000ULL);
+-
+-        if (fgActive)
+-            min_interval_us *= 2;
+-
+         static uint64_t previous_frame_time = 0;
+         uint64_t current_time = Util::GetTimestamp();
+         uint64_t frame_time = current_time - previous_frame_time;
+diff --git a/OptiScaler/misc/FrameLimit.h b/OptiScaler/misc/FrameLimit.h
+index 571dd7c..99edec0 100644
+--- a/OptiScaler/misc/FrameLimit.h
++++ b/OptiScaler/misc/FrameLimit.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "SysUtils.h"
++#include "FrameLimitPolicy.h"
+ 
+ class FrameLimit
+ {
+@@ -8,5 +9,5 @@ class FrameLimit
+     static int combined_sleep(int64_t ns);
+ 
+   public:
+-    static void sleep(bool fgActive);
++    static void sleep(std::uint64_t outputFramesPerRenderedFrame = 1);
+ };
+diff --git a/OptiScaler/misc/FrameLimitPolicy.h b/OptiScaler/misc/FrameLimitPolicy.h
+new file mode 100644
+index 0000000..d02c18d
+--- /dev/null
++++ b/OptiScaler/misc/FrameLimitPolicy.h
+@@ -0,0 +1,25 @@
++#pragma once
++#include <algorithm>
++#include <cmath>
++#include <cstdint>
++
++// Fallback limiter policy: output cap includes real and generated frames.
++// For dynamic MFG this uses the configured maximum, a conservative ceiling,
++// not a measurement of the number of images actually displayed this frame.
++namespace FrameLimitPolicy
++{
++constexpr std::uint64_t OutputMultiplier(bool active, std::uint32_t generatedFrames) noexcept
++{
++    return active ? std::uint64_t(generatedFrames) + 1 : 1;
++}
++inline std::uint64_t MinimumIntervalUs(float outputFpsCap, std::uint64_t outputFramesPerRenderedFrame) noexcept
++{
++    if (!std::isfinite(outputFpsCap) || outputFpsCap <= 0.0f)
++        return 0;
++    const double multiplier = static_cast<double>(std::max<std::uint64_t>(1, outputFramesPerRenderedFrame));
++    const double interval = 1000000.0 * multiplier / static_cast<double>(outputFpsCap);
++    // Clamp the complete interval before conversion; invalid/tiny caps and large
++    // counts must not overflow a floating-to-integer conversion or timer math.
++    return static_cast<std::uint64_t>(std::clamp(interval, 0.0, 100000000.0));
++}
++}
+diff --git a/OptiScaler/wrapped/wrapped_swapchain.cpp b/OptiScaler/wrapped/wrapped_swapchain.cpp
+index 7a51761..f0acac9 100644
+--- a/OptiScaler/wrapped/wrapped_swapchain.cpp
++++ b/OptiScaler/wrapped/wrapped_swapchain.cpp
+@@ -798,7 +798,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::Present(UINT SyncInterval, UIN
+         // When Reflex can't be used to limit, sleep in present
+         if (!State::Instance().reflexLimitsFps && State::Instance().activeFgOutput == FGOutput::NoFG &&
+             !IdentifyGpu::getPrimaryGpu().usesDxvk && !XellHooks::canLimit())
+-            FrameLimit::sleep(false);
++            FrameLimit::sleep(1);
+     }
+     else
+     {
+@@ -1156,7 +1156,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::Present1(UINT SyncInterval, UI
+         // When Reflex can't be used to limit, sleep in present
+         if (!State::Instance().reflexLimitsFps && State::Instance().activeFgOutput == FGOutput::NoFG &&
+             !IdentifyGpu::getPrimaryGpu().usesDxvk && !XellHooks::canLimit())
+-            FrameLimit::sleep(false);
++            FrameLimit::sleep(1);
+     }
+     else
+     {

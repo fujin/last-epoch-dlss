@@ -1,0 +1,153 @@
+PUBLIC ALPHA RELEASE PLAN
+=========================
+Drafted 31 October 2026. This is a readiness plan, not a release approval.
+
+FIRST RELEASE SCOPE
+
+Aim for an experimental Windows / D3D11 alpha: native-resolution DLAA, optional
+NVIDIA frame generation, and opt-in Neural Rendering. Keep reduced-resolution
+Quality/Balanced/Performance guarded until issue #1 is validated in the game.
+Scope late HUDless to the validated 8-bit SDR game output on the primary display.
+OS-level HDR is a separate
+setting and does not prove native HDR-game support. Start with the hardware,
+driver and game builds actually tested; currently that includes an RTX 5080 and Last Epoch 1.5.3 / Unity 6000.4.8f1. Do not imply wider
+GPU/API support from compilation alone.
+
+NR should remain off in the initial profile. Offer a conservative starting
+profile and explain render FPS, FG multiplier, output cap and response latency.
+WorkingScale=0.5 is a measured development setting, not a universal optimum.
+A 240 FPS target is a separate performance goal, not a prerequisite for an
+honestly scoped alpha. Neither a DXGI call counter nor a user's FPS observation
+establishes unique generated images or physical display cadence.
+
+Development testing has been offline. Record that scope and do not claim online
+compatibility or an account-safety guarantee. Check current publisher terms and
+seek clarification where needed before making a public online-support claim.
+
+WORK THAT CAN PROCEED WITHOUT STARTING LAST EPOCH
+
+Issue #1 - SR: design camera/PPv2 target ownership, shared dimension validation,
+           reset/lifetime handling and software contracts. Actual scaled output,
+           HUD/input coordinates and scene transitions need the game.
+Issue #2 - Latency: audit limiter/Reflex code, test pure cap arithmetic, improve
+           diagnostic labeling and document profiles. Input-to-display latency
+           and NR-on response comparisons need instrumented runtime tests.
+Issue #3 - FG/HUD: improve counter/log tooling and analyze saved captures. New
+           displayed-frame, motion and UI coverage needs runtime capture.
+Issue #4 - 240 FPS: prepare repeatable capture/profiling procedures and identify
+           possible copy/synchronization costs. No offline FPS claim is valid.
+Issue #5 - Stability: native WARP contracts, installer/restore fixtures, failure
+           paths and source/resource-lifetime review. These do not replace
+           longer game sessions or device-loss/transition testing.
+Issue #6 - Input: implement/review interception and document rebinding. Actual
+           click-through, key toggling and focus behavior need game validation.
+
+For offline verification, build native tests in a separate build directory.
+Do not use Build.ps1 for an isolated validation run: that helper also stages its
+outputs. Preserve the selected E841/257A/571C artifacts and their provenance.
+New backend fixes must have separate patches/candidates and runtime status;
+passing arithmetic tests does not promote a new binary into the installed mod.
+
+RELEASE GATES
+
+[ ] Choose an explicit license for original managed/loader/script code.
+    NOTICE currently reserves those rights instead of assigning a blanket
+    license. Preserve the native Apache-2.0 and backend GPL-3.0 notices. Do not
+    relabel third-party code or models with the project's eventual license.
+
+[ ] Review the exact dependency distribution terms and ship a license inventory.
+    Cover BepInEx, OptiScaler, native upstream code, Streamline, NGX/Reflex and the
+    exact NR model package. The Remix project's open-source license does not
+    relicense the proprietary model. NVIDIA SDK distribution has conditions;
+    using a downloader does not by itself resolve all licensing obligations.
+    Preserve complete corresponding source and build instructions for a shipped
+    modified GPL backend. Verify those sources reconstruct the actual candidate.
+
+[ ] Assemble a deliberately minimal release payload from an allowlist.
+    Never publish the working directory or stage wholesale. Exclude game assets,
+    generated game interop, saves, local configs, raw logs/screenshots, backups,
+    credentials, SDK/build tools and unrelated experiments. Include versioned
+    manifests, checksums, notices and matching source/provenance. Decide which
+    dependencies can be included and which require a verified official fetch.
+
+[ ] Provide an end-user bootstrap and verify install, update and uninstall.
+    Journaled install/restore primitives already exist. The remaining work is a
+    clear wrapper, Steam/custom game-path detection, compatible-version checks,
+    proxy/mod-conflict detection, understandable failures and clean-machine
+    proof. Preserve user configuration and original files; reject changed or
+    unowned files. Keep the running-game guard and path-containment checks.
+    Verify repair/rollback for interrupted downloads and partial installation.
+    Include the external interop-repair tool and its required runtime host.
+    It currently targets net8.0 and the repair script invokes tools/dotnet plus
+    tools/interop-repair. Choose a supported runtime for the release date or a
+    reviewed self-contained tool package; an SDK should not be an end-user
+    prerequisite merely because development uses the portable SDK.
+
+[ ] Verify a fresh-source build and a fresh-machine installation.
+    Reconstruct the selected backend from the pinned archive plus its complete
+    patch, rather than relying on the development vendor tree. Fetch-Backend
+    currently fetches an official backend, while the validated late-HUD/counter
+    path requires our custom variant. Supply a reviewed, versioned artifact plus
+    matching source/manifest promotion process. Do not ask users to edit trust
+    pins to accept a rebuild; build dates can legitimately change DLL hashes.
+    Promotion is a maintainer responsibility: the current helper checks the
+    backend DLL and seven exact provenance files together.
+    Confirm the
+    loader/interop-generation flow on an owned installation. Generated game
+    references are local prerequisites, not public CI inputs or release assets.
+
+[ ] Automate the tests that do not depend on a game installation.
+    Windows native software-D3D11 contracts and isolated install/restore fixtures
+    can run in CI. Keep CI read-only with respect to repository permissions and
+    use pinned actions. Track candidate arithmetic tests separately when they
+    require reconstructed upstream source. CI cannot certify FG/NR image quality.
+
+[ ] Complete a documented runtime matrix for the release candidate.
+    Include native 1080p/1440p and the tested ultrawide mode where available;
+    combat, portals/scene changes, menu/UI coverage, NR/FG changes, focus/Alt-Tab,
+    normal exit and repeated sessions. Use paired Unity/backend logs. Verify
+    distinct generated content and cadence, responsiveness, supported-format
+    handling and useful fallback for unsupported formats. Reproduce on at least
+    one additional machine before describing the binary as generally usable.
+    Keep unsupported resolutions/modes explicitly outside the tested claim.
+
+[ ] Fix or remove interactive diagnostic UI from the end-user experience.
+    F10 debug-panel clicks must not affect gameplay. Verify the backend menu's
+    remapped hotkey and focus handling. Document F11 or another accessible key;
+    existing rebinding support does not need to be reinvented.
+
+[ ] Prepare release notes, support intake and privacy-aware diagnostics.
+    Lead with supported features and explicit limitations, installation/removal,
+    hardware/game/driver requirements and the tested default profile. Explain
+    where to report game version, GPU/driver, settings and a reproducible scene.
+    Redact account, machine/user paths and unrelated session details from logs.
+    Include a known-issues link and a recovery procedure that users can follow.
+
+FIRST-ALPHA BLOCKERS VERSUS LATER GOALS
+
+An explicit licensing/distribution decision, repeatable installation/removal,
+correct advertised rendering, usable input and bounded runtime stability are
+release blockers. Fully working SR, universal GPU support, artifact-free output
+in every untested scenario and sustained 240 FPS are not required for a scoped
+alpha; they must remain accurately documented limitations and open work.
+The public package must not present the current source-only prototype as a
+finished installer or label an untested candidate with a previously tested hash.
+
+PUBLISHING
+
+Prepare a versioned candidate archive and source tag only after the gates above
+have evidence. Making the private repository public and publishing an alpha are
+separate deliberate actions; neither is performed by creating this plan.
+
+REFERENCES
+
+Existing backlog: https://github.com/fujin/last-epoch-dlss/issues
+Existing packaging scope: REPOSITORY.txt and NOTICE
+Dependency identities/licenses: packaging/backend-plan.json
+Original prerequisites: packaging/build-prerequisites.json
+Backend source reconstruction: packaging/patches/README.txt
+Recorded validation: docs/validation and packaging/source-candidates.json
+Official NVIDIA RTX SDK license (review exact shipped version as well):
+https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt
+Official Streamline license for the pinned version:
+https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt
