@@ -4,7 +4,8 @@ UNSELECTED FALLBACK-LIMITER SOURCE CANDIDATE
 Tracks https://github.com/fujin/last-epoch-dlss/issues/2. This is a focused review
 and test delta against the selected 571C menu-fence source, not a complete patch
 against the original upstream archive and not a replacement for 571C.
-No backend DLL is supplied, built, staged, installed, or selected by these files.
+No backend DLL is included in this repository, staged, installed, or selected.
+The optional full-build recipe compiles a local candidate into an ignored tree.
 
 PROBLEM AND CHANGE
 
@@ -53,6 +54,32 @@ use no game, GPU, graphics DLL, Sleep, timing benchmark or latency measurement.
 Results and the reconstructed production-header hash remain in the unique
 build/fallback-limiter-tests-* directory printed by the script.
 
+FULL BACKEND COMPILE CHECK (NO GAME)
+
+Run from the repository root:
+  & .\packaging\patches\fallback-limiter\Build-Candidate.ps1 -ParallelProcesses 2
+
+This separate recipe extracts the COMPLETE pinned archive into a fresh ignored
+build/fallback-limiter-full-* tree. It checks the 571C complete patch, applies it
+once, verifies all 14 baseline modified-file hashes and the unchanged DX11
+interop source, then applies the focused fallback delta. It never uses the mixed
+vendor tree. The reconstructed Build-Local.ps1 builds Release x64 with at most
+two compiler processes and disables upstream packaging events. dumpbin checks
+four extension exports without loading the DLL. Logs, exports and build-results
+remain in that unique ignored directory. No binary is uploaded by the script.
+
+The 2026-11-04 full build passed with MSVC 14.44.35207/v143: 0 errors and the two
+known upstream warnings C4744 (atomic shared_ptr alignment) and LNK4098 (mixed
+CRT libraries). All four extension exports were present. Candidate DLL:
+  26,470,912 bytes
+  SHA256 D1B725510A86D2F9CEF11E4321F2719FAD5F364C76DAB898065CA066C3ED117B
+
+full-build-validation.json records the ordered input hashes, 19 changed source
+file identities, two generated build-identity headers, toolchain, artifact and
+static export evidence. Timestamps/toolchain differences can change a rebuild's
+DLL hash. This is compile proof only: pacing, latency, dynamic MFG and in-game
+compatibility remain unvalidated. The selected 571C backend remains unchanged.
+
 PROVENANCE AND FUTURE USE
 
 Base: Skynizz/optiscaler-dlss5 revision 6bfc4389c25054ef6747df6e6b1b470e9541c4da,
@@ -61,7 +88,7 @@ Prerequisite full patch: ../menu-fence/late-hudless.patch, SHA256
 53E3ED17C77CB12BF7710BEE540A8EF40F47DBA99EAEBD33325D29C78A196958.
 See candidate-manifest.json for the new delta hash and explicit unselected state.
 
-For a later full backend build, reconstruct a FRESH complete archive, apply the
+For another full backend build, reconstruct a FRESH complete archive, apply the
 571C complete patch once, then this focused delta. Do not stack other complete
 variant patches. Preserve 571C's original patches, notices, manifests and selected
 hashes unchanged. A later DLL needs its own complete corresponding-source record,

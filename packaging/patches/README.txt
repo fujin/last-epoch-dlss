@@ -69,7 +69,9 @@ the native Reflex limiter, and does not establish lower end-to-end latency.
 fallback-limiter/Test-Candidate.ps1 reconstructs just the upstream files needed
 for this delta and compiles tests against its actual production policy header.
 It does not build a complete backend DLL, run its timer, install anything or
-launch the game. Full-backend build and runtime validation remain pending.
+launch the game. Build-Candidate.ps1 separately reconstructs and compiles the
+complete backend in a new isolated directory. Its recorded full build and static
+exports passed; the candidate remains unselected and runtime validation is pending.
 See fallback-limiter/README.txt and candidate-manifest.json before using it.
 
 RECONSTRUCTION RECIPE (POWERSHELL, FROM REPOSITORY ROOT)

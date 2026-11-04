@@ -1,0 +1,89 @@
+name: Bug report
+description: Report a reproducible problem with the graphics prototype.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Reduced-resolution SR modes (Quality, Balanced, Performance) are currently
+        unsupported. See the [README](https://github.com/fujin/last-epoch-dlss)
+        for the tested scope. Use "unknown" where details are unavailable.
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Game and system
+      placeholder: |
+        Last Epoch version / Steam build:
+        Windows version / build:
+        GPU:
+        Graphics driver version:
+    validations:
+      required: true
+
+  - type: textarea
+    id: mod-build
+    attributes:
+      label: Mod build identity
+      description: Give the commit, build/release identifier or installed DLL hashes you have; note any local changes.
+      placeholder: "Commit/build: ...; managed/native/backend identities: ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Graphics and feature settings
+      placeholder: |
+        Display/render resolution and window mode:
+        Rendering API and render mode (Probe/DLAA/other):
+        FG multiplier (1 means off):
+        NR enabled/disabled and working scale:
+        Late HUDless enabled/disabled:
+        FPS cap value and where set (game/backend/driver), VSync:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: session-mode
+    attributes:
+      label: Session mode when the problem occurred
+      options:
+        - Offline
+        - Online
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest repeatable sequence, relevant scene and how often it occurs.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected and observed result
+      description: If reporting performance or input response, identify the tool and units. Label FPS readouts, measured latency and perceived delay separately.
+      placeholder: |
+        Expected:
+        Observed:
+        Measurement method/tool, if applicable:
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant redacted diagnostics (optional)
+      description: Paste short relevant log excerpts or a preflight report. Remove account identifiers, personal/user paths, credentials and tokens. Do not post full logs or session history.
+      render: text
+    validations:
+      required: false

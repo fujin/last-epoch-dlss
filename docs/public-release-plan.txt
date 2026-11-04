@@ -1,6 +1,7 @@
 PUBLIC ALPHA RELEASE PLAN
 =========================
-Drafted 31 October 2026. This is a readiness plan, not a release approval.
+Drafted 31 October 2026; updated 4 November 2026. This is a readiness plan.
+The source repository is public; a downloadable alpha still requires validation.
 
 FIRST RELEASE SCOPE
 
@@ -8,9 +9,9 @@ Aim for an experimental Windows / D3D11 alpha: native-resolution DLAA, optional
 NVIDIA frame generation, and opt-in Neural Rendering. Keep reduced-resolution
 Quality/Balanced/Performance guarded until issue #1 is validated in the game.
 Scope late HUDless to the validated 8-bit SDR game output on the primary display.
-OS-level HDR is a separate
-setting and does not prove native HDR-game support. Start with the hardware,
-driver and game builds actually tested; currently that includes an RTX 5080 and Last Epoch 1.5.3 / Unity 6000.4.8f1. Do not imply wider
+OS-level HDR is separate and does not prove native HDR-game support. Start with the hardware,
+driver and game builds actually tested; currently that includes an RTX 5080
+and Last Epoch 1.5.3 / Unity 6000.4.8f1. Do not imply wider
 GPU/API support from compilation alone.
 
 NR should remain off in the initial profile. Offer a conservative starting
@@ -50,10 +51,11 @@ passing arithmetic tests does not promote a new binary into the installed mod.
 
 RELEASE GATES
 
-[ ] Choose an explicit license for original managed/loader/script code.
-    NOTICE currently reserves those rights instead of assigning a blanket
-    license. Preserve the native Apache-2.0 and backend GPL-3.0 notices. Do not
-    relabel third-party code or models with the project's eventual license.
+[x] Original-code license chosen on 4 November 2026: MIT (root LICENSE).
+    NOTICE scopes this to original plugin/loader/repair code, scripts and docs.
+    Native bridge and adapted managed Native.cs bindings retain Apache-2.0;
+    backend patches/tests retain GPL-3.0. Third-party distribution review is
+    still a separate release requirement.
 
 [ ] Review the exact dependency distribution terms and ship a license inventory.
     Cover BepInEx, OptiScaler, native upstream code, Streamline, NGX/Reflex and the
@@ -77,11 +79,15 @@ RELEASE GATES
     proof. Preserve user configuration and original files; reject changed or
     unowned files. Keep the running-game guard and path-containment checks.
     Verify repair/rollback for interrupted downloads and partial installation.
+    The read-only developer preflight and its fixture tests now cover current
+    source/stage prerequisites and journal-aware collisions (docs/preflight.txt).
+    It deliberately leaves release authenticity and runtime compatibility open.
     Include the external interop-repair tool and its required runtime host.
     It currently targets net8.0 and the repair script invokes tools/dotnet plus
     tools/interop-repair. Choose a supported runtime for the release date or a
     reviewed self-contained tool package; an SDK should not be an end-user
-    prerequisite merely because development uses the portable SDK.
+    prerequisite merely because development uses the portable SDK. The repair
+    output also copies Mono.Cecil.dll; retain that dependency's separate notice.
 
 [ ] Verify a fresh-source build and a fresh-machine installation.
     Reconstruct the selected backend from the pinned archive plus its complete
@@ -92,15 +98,16 @@ RELEASE GATES
     pins to accept a rebuild; build dates can legitimately change DLL hashes.
     Promotion is a maintainer responsibility: the current helper checks the
     backend DLL and seven exact provenance files together.
-    Confirm the
-    loader/interop-generation flow on an owned installation. Generated game
+    Confirm the loader/interop-generation flow on an owned installation. Generated game
     references are local prerequisites, not public CI inputs or release assets.
 
-[ ] Automate the tests that do not depend on a game installation.
-    Windows native software-D3D11 contracts and isolated install/restore fixtures
-    can run in CI. Keep CI read-only with respect to repository permissions and
-    use pinned actions. Track candidate arithmetic tests separately when they
-    require reconstructed upstream source. CI cannot certify FG/NR image quality.
+[x] Establish game-free native/deployment CI.
+    The Windows native build, WARP contract and 19 install/restore fixtures passed
+    on GitHub Actions for commit 48bf2fa. The read-only preflight adds 43 local
+    fixtures and is wired into the same workflow. The limiter candidate has 38
+    policy checks and a clean full-source backend compile/export check; it is
+    still unselected and unvalidated in the game. CI cannot certify rendering,
+    actual frame pacing or end-to-end latency.
 
 [ ] Complete a documented runtime matrix for the release candidate.
     Include native 1080p/1440p and the tested ultrawide mode where available;
@@ -136,8 +143,9 @@ finished installer or label an untested candidate with a previously tested hash.
 PUBLISHING
 
 Prepare a versioned candidate archive and source tag only after the gates above
-have evidence. Making the private repository public and publishing an alpha are
-separate deliberate actions; neither is performed by creating this plan.
+have evidence. The source repository is public as of 4 November 2026.
+Publishing a downloadable
+alpha remains a separate action after validation and packaging review.
 
 REFERENCES
 

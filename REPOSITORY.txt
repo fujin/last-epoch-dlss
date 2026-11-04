@@ -79,7 +79,9 @@ replace those backups. Follow README.txt's Restore.ps1 procedure while stopped.
 
 LICENSING
 
-Read NOTICE and the applicable subtree notices. The native bridge retains its
+Original plugin/loader/repair code, scripts and documentation are MIT-licensed,
+with the explicit exceptions in NOTICE. The native bridge and adapted managed
+wire bindings retain their
 Apache-2.0 license. OptiScaler source patches retain GPL-3.0 and their exact base
 source provenance. NVIDIA model/runtime and Streamline licenses are separate;
 their binaries are fetched from the identified sources and are not in Git.

@@ -8,9 +8,16 @@
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/offline-checks.yml
+# Expose only the reviewed bug-report form and template chooser config.
+!/.github/ISSUE_TEMPLATE/
+/.github/ISSUE_TEMPLATE/*
+!/.github/ISSUE_TEMPLATE/bug_report.yml
+!/.github/ISSUE_TEMPLATE/config.yml
+!/README.md
 !/README.txt
 !/REPOSITORY.txt
 !/NOTICE
+!/LICENSE
 !/src/
 !/scripts/
 !/packaging/

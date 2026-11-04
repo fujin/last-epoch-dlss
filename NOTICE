@@ -1,19 +1,29 @@
 Last Epoch graphics prototype
 
 This is an experimental third-party integration, not an official Last Epoch,
-NVIDIA, BepInEx or OptiScaler release. See README.txt for tested behavior and
-known failures. This repository contains source and build recipes, not game
-assets, generated game interop, proprietary NVIDIA models or runtime binaries.
+NVIDIA, BepInEx or OptiScaler release. See README.md for current scope and
+README.txt for detailed evidence. The repository contains source and build
+recipes, not game assets, generated game interop, proprietary NVIDIA models
+or runtime binaries.
 
-Native bridge source adapted from Big Beautiful Walk retains its Apache-2.0
-license and attribution in src/native/LICENSE, NOTICE and UPSTREAM-NOTICE.
+Original code in src/managed (except Native.cs), src/loader-diagnostics,
+src/interop-repair, scripts and .github, plus original project documentation
+and packaging metadata outside packaging/patches, is licensed under the MIT
+license in the root LICENSE file. Existing third-party notices and licenses
+take precedence for their respective material.
 
-Curated modifications to OptiScaler are distributed as GPL-3.0 source patches.
-Each packaging/patches variant retains the original license, source notice and
-manifest. Its pinned base archive plus the complete patch reconstruct the
-corresponding modified backend source. NVIDIA/Streamline components have their
-own licenses and are downloaded separately using the pinned manifests.
+The native bridge in src/native and the adapted frame wire bindings in
+src/managed/Native.cs derive from Big Beautiful Walk and retain Apache-2.0.
+Their license and attribution are in src/native/LICENSE, src/native/NOTICE
+and src/native/UPSTREAM-NOTICE. The MIT license does not replace these terms.
 
-No top-level license here supersedes the licenses and copyright notices of
-those components. Original standalone managed/loader/script files retain their
-authors' rights; this notice does not assign them an additional blanket license.
+Curated modifications to OptiScaler are distributed under GPL-3.0, including
+the fallback-limiter source candidate and its tests. Each corresponding
+packaging/patches directory retains its LICENSE and source/provenance records.
+Follow packaging/patches/README.txt to reconstruct complete variants or apply
+the separately identified experimental delta to its required baseline.
+
+NVIDIA/Streamline components and other downloaded dependencies retain their
+own licenses and notices. An upstream project's open-source license does not
+relicense proprietary runtime DLLs or models distributed alongside it. The
+root MIT license grants no rights to those third-party components or game files.

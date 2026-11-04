@@ -1,0 +1,76 @@
+Read-only source and installation-candidate preflight
+====================================================
+
+Run in 64-bit PowerShell on Windows, from the real project path (not a junction):
+
+  .\scripts\Preflight.ps1 -GameDirectory 'D:\SteamLibrary\steamapps\common\Last Epoch' -Scope All -AsJson
+
+The game path is required and is never guessed. Source, Stage and All are supported.
+Source checks build prerequisites. Stage checks the current separate loader and
+mod stage plus collisions with the game/journal; it does not build or stage them.
+For a prepared package on a machine without a compiler, use -Scope Stage.
+
+Optional -StageDirectory and -DiagnosticsDirectory select a candidate stage and
+its existing deployment journal. Preserve the correct journal across updates;
+without it, an installed proxy/loader is deliberately reported as unmanaged.
+-FailOnBlocker throws after producing the report when any Fail is present, for
+automation. Warnings do not throw. NoDetectedBlockers is a snapshot, not approval
+to install or a runtime compatibility claim.
+
+The command reads files, SHA256 hashes, PE export metadata and process names.
+It never runs the game, .NET, compiler, installer, repair tool, downloaded DLL,
+network request or other external program. It never writes a report or changes
+configuration, deployment journals, backups, source or installation files.
+The existing install/restore scripts retain their own guards and recheck state.
+Permission/path/manifest failures are blockers; preflight cannot grant access.
+
+Checks currently include:
+- Required IL2CPP installation files, known Unity engine product version, and
+  game-stopped snapshot (advisory for Source-only mode). Unity's EXE version is not Last Epoch's game version.
+- Source prerequisites: project-local pinned SDK layout, Streamline headers,
+  BepInEx references, locally generated game interop and CMake/CTest/Git presence.
+  These SDK/header/reference/tool checks establish presence, not complete release
+  authentication. Compiler/SDK/tool versions and interop freshness still need validation.
+- Selected recorded managed/native/backend SHA256 pins, backend PE exports and
+  corresponding-source document pins. New builds require maintainer review and
+  promotion, not a user's edit of trust hashes.
+- Separate loader and loader-fix inventory, explicit configuration presence,
+  and external interop-repair tool plus project-local .NET 8 runtime presence.
+- Backend dependency receipt completeness/integrity, direct-file SHA256 pins
+  and optional NR model/forwarder/license pins when NR payload is present.
+- Existing deployment journal identity, unmanaged hooks/loaders, protected game
+  files, path reparse points and payload/target collisions. A missing current
+  owned file can be restored by the existing installer; changed bytes cannot.
+
+Important limits:
+- Last Epoch 1.5.3 / Steam build 26087601 was tested. This command does not parse
+  Steam manifests or certify game build identity. Matching Unity alone is
+  insufficient. It does not claim an unknown installation is validated.
+- ZIP member hashes are checked against the local download receipt. That catches
+  accidental drift, not forged receipts. Complete independently reviewed per-file
+  release manifests, archive-member verification and loader authenticity belong
+  to the next package-validation slice. Extra files are not release-allowlisted.
+- The scan reports configuration file presence; it does not approve settings.
+  Optional NR files must remain disabled if absent. No licence/redistribution
+  determination or full Authenticode/driver/GPU capability check occurs.
+- Offline Windows x64, D3D11, native DLAA and RTX 5080 are the tested scope.
+  Primary-display 8-bit SDR game output is the initial late-HUDless contract;
+  Windows desktop HDR is a separate setting. Reduced-resolution SR remains
+  unsupported. Online play and broad stability remain unverified.
+- File hashes describe the recorded test artifacts, not proof that the current
+  source compiles identically or that a future package is secure.
+- Stage and Source summaries remain separate: a missing compiler/SDK does not
+  block an otherwise prepared Stage scan. The current external repair launcher
+  still requires its .NET runtime even when build tools are unnecessary.
+
+Fixtures:
+  .\scripts\Test-Preflight.ps1
+
+The tests exercise pure hash/game-state/collision decisions with injected facts,
+then scan an isolated temporary fixture and verify no bytes or paths changed.
+Focused cases reject malformed required pins and retain version/runtime/NR read
+failures as structured report entries; injected read errors need no ACL changes.
+They do not query actual game process state, modify install guards, use the
+installed game, execute a fixture binary, access the network or launch anything.
+No Pester dependency is required. Test fixtures remove only their checked
+temporary directory after completion.

@@ -39,3 +39,6 @@ jobs:
 
       - name: Test deployment and restoration in isolated fixtures
         run: .\scripts\Test-Deployment.ps1
+
+      - name: Test read-only preflight decisions and filesystem behavior
+        run: .\scripts\Test-Preflight.ps1

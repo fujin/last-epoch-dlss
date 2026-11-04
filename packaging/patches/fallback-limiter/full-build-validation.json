@@ -1,0 +1,150 @@
+{
+  "Variant": "fallback-limiter-multiplier-source-candidate",
+  "Result": "PASS",
+  "StartedUtc": "2026-11-04T05:05:44.095951Z",
+  "CompletedUtc": "2026-11-04T05:07:48.9375803Z",
+  "BaseSourceArchiveSha256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
+  "OrderedPatches": [
+    {
+      "Path": "packaging/patches/menu-fence/late-hudless.patch",
+      "Sha256": "53E3ED17C77CB12BF7710BEE540A8EF40F47DBA99EAEBD33325D29C78A196958"
+    },
+    {
+      "Path": "packaging/patches/fallback-limiter/fallback-limiter-only.patch",
+      "Sha256": "54A29549EE06AA2F4DCE548AA356BDB3E9331200E8646A7130F2A057233C2DEC"
+    }
+  ],
+  "BaselineFilesVerified": 14,
+  "BaselineInteropSourceVerified": {
+    "Path": "OptiScaler/with_dx12/dx11_with_dx12_sc.cpp",
+    "Sha256": "E225BF053DDCFF1B0B6415899E40AC5D4525BAF528FAB8D23052140404C1298A"
+  },
+  "SourceFiles": [
+    {
+      "Path": "Build-Local.ps1",
+      "Sha256": "3D65D999D3E173CC7D459151C6C267713722B8944C893A9B778B9FB60B387A26"
+    },
+    {
+      "Path": "docs/LATE-HUDLESS-D3D11.md",
+      "Sha256": "A2261DFBC611BACB15451A4B4FF2F14A10B1971ADF85BDB65ADADE31E8A681A2"
+    },
+    {
+      "Path": "docs/PRESENTATION-STATS-V1.md",
+      "Sha256": "ECA2FBA3C338107B72B3F265FE2FE380A95A0E325DA6DE3983E965E3386F34EF"
+    },
+    {
+      "Path": "OptiScaler/framegen/IFGFeature.cpp",
+      "Sha256": "C6C36BAE38A94E18ED1065BEB34776AA6E23FC3DD492860E0644002433CA7A2E"
+    },
+    {
+      "Path": "OptiScaler/framegen/PresentationStats.cpp",
+      "Sha256": "71AB62BCA0E9B682B968E8F9672C546596474F05481D79C5A9170B1656FD0981"
+    },
+    {
+      "Path": "OptiScaler/framegen/PresentationStats.h",
+      "Sha256": "7872AE36AF978C604390061F39B9DD30A89FBA68BA863314555FEA35BA09139E"
+    },
+    {
+      "Path": "OptiScaler/hooks/FG_Hooks.cpp",
+      "Sha256": "8F315960F4EAC0D0055DB032BDE645B798B323AF1917ED1E6EEA5AE6912B4CB0"
+    },
+    {
+      "Path": "OptiScaler/hooks/Vulkan_Hooks.cpp",
+      "Sha256": "6D1942636A9B6C5D95CFE0DE27CBB061928899B92175BE344B6AB5181EBB4CD4"
+    },
+    {
+      "Path": "OptiScaler/hudfix/ExternalHudless_Dx11.h",
+      "Sha256": "F46CEE39A9051165D3B6DDEC76F2874F0E69A267911D9E2B60ECEC46E5126F76"
+    },
+    {
+      "Path": "OptiScaler/hudfix/Hudfix_Dx11.cpp",
+      "Sha256": "9C1F49E17AAE7BB5C736EC882FFF268C4576C45BE6CF878E1DB0BBD7DA9C586D"
+    },
+    {
+      "Path": "OptiScaler/hudfix/Hudfix_Dx11.h",
+      "Sha256": "C324826088DE81B51E984CAE2E6A94617F2B82B752B9FA6FDA37481BA1F63DCD"
+    },
+    {
+      "Path": "OptiScaler/include/imgui/imgui_impl_dx12.cpp",
+      "Sha256": "B39F8439528ECE911AE2691610A2E08E24031080F28EA34C76EB6FC71A13EA23"
+    },
+    {
+      "Path": "OptiScaler/menu/menu_overlay_dx.cpp",
+      "Sha256": "B2574BEB3E41A86A4909B1A8341AC80DA7400B6E07D41D5DB9D8BC33949E981B"
+    },
+    {
+      "Path": "OptiScaler/misc/FrameLimit.cpp",
+      "Sha256": "78B318DA6E15BB77D21BD733B9C8A09A800E95C662840250600F720164C63345"
+    },
+    {
+      "Path": "OptiScaler/misc/FrameLimit.h",
+      "Sha256": "EDD27EDBFF96BFEA0E1162B3FF4D35BDE5A5049A63B178451311F5AF848FFD47"
+    },
+    {
+      "Path": "OptiScaler/misc/FrameLimitPolicy.h",
+      "Sha256": "F7701869AB6F56C6D2052D97561D4D02BB5270580096F5295936016D4E84FF44"
+    },
+    {
+      "Path": "OptiScaler/OptiScaler.vcxproj",
+      "Sha256": "DB02C4C6FFD3D8F60BA7BAC33FE4C11C827C0A2884065C1656B15270D870F4AD"
+    },
+    {
+      "Path": "OptiScaler/Source.def",
+      "Sha256": "D6E57484EA67405F3C9BF321A34F3F15B1D20944F1A674C2EEDBF62DC7A9AA38"
+    },
+    {
+      "Path": "OptiScaler/wrapped/wrapped_swapchain.cpp",
+      "Sha256": "E3C52D27474DE1B4898D8261E318C84730DF3C7F6384572AE4B40EB3519427EE"
+    }
+  ],
+  "GeneratedBuildIdentity": [
+    {
+      "Path": "OptiScaler/resource_build_date.h",
+      "Sha256": "AC50E78B19EF3E513B06C002B547FCBF089B34569B8CA72665A6E2E7C466CB1C",
+      "Content": "#define VER_BUILD_DATE \"20261104_050544\"\r\n"
+    },
+    {
+      "Path": "OptiScaler/resource_build_commit.h",
+      "Sha256": "65F08500A7D884A37A655D6F3DBB07D42E57A1D0EAE70C0CE3ECC2C70B708C27",
+      "Content": "#define VER_BUILD_COMMIT \"6bfc4389-local-late-hudless\"\r\n"
+    }
+  ],
+  "Toolchain": {
+    "MSVC": "14.44.35207",
+    "Platform": "x64",
+    "Configuration": "Release",
+    "PlatformToolset": "v143",
+    "ParallelProcesses": 2
+  },
+  "BuildRecipe": "Complete pinned archive + ordered patches; reconstructed Build-Local.ps1 -ParallelProcesses 2 -BuildDirectoryName local-build-fallback-limiter; upstream packaging events disabled",
+  "Dll": {
+    "Name": "OptiScaler.dll",
+    "Bytes": 26470912,
+    "Sha256": "D1B725510A86D2F9CEF11E4321F2719FAD5F364C76DAB898065CA066C3ED117B"
+  },
+  "ExtensionExports": [
+    "OptiScaler_GetHudlessD3D11Version",
+    "OptiScaler_GetHudlessFrameTokenD3D11",
+    "OptiScaler_SubmitHudlessD3D11",
+    "OptiScaler_GetPresentationStatsV1"
+  ],
+  "ExportInspection": "dumpbin only; DLL was not loaded",
+  "Warnings": [
+    "LINK : warning C4744: 'static struct std::atomic<class std::shared_ptr<class LowLatencyTech> > InputCommon::currently_active_tech' has different type in '<reconstruction>\\source\\optiscaler-dlss5-1.2.1\\optiscaler\\nvapi\\fakenvapi\\low_latency_d3d.cpp' and '<reconstruction>\\source\\optiscaler-dlss5-1.2.1\\optiscaler\\hooks\\amdxc64_hooks.cpp': '__declspec(align(16)) struct (16 bytes)' and 'struct (16 bytes)' [<reconstruction>\\source\\OptiScaler-DLSS5-1.2.1\\OptiScaler\\OptiScaler.vcxproj]",
+    "LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library [<reconstruction>\\source\\OptiScaler-DLSS5-1.2.1\\OptiScaler\\OptiScaler.vcxproj]"
+  ],
+  "BuildLogSha256": "BBEAE8F84FC8FDC3BC2E7D20941B7DD2E0455ECBE90CF4D55009FDBA9F45BA66",
+  "ExportLogSha256": "643EA1883B9A25068C35C5A653E2CD4DED318184FE5EFDDD5A7F313F716F1948",
+  "RuntimeValidated": false,
+  "Deployed": false,
+  "Published": false,
+  "SelectedBackendChanged": false,
+  "BuildErrors": 0,
+  "BuildWarnings": 2,
+  "WarningCodes": [
+    "C4744",
+    "LNK4098"
+  ],
+  "BuildRecipeScriptSha256": "DEA39AE89769242F82571B15D41C8F9573E330591417F726F3B823E94988DFFC",
+  "EvidenceNote": "Local reconstruction paths in warning text are normalized. This records compile/link and static PE export inspection only; DLL was not loaded, staged, installed, or publicly distributed."
+}

@@ -1,6 +1,6 @@
 {
   "Variant": "fallback-limiter-multiplier-source-candidate",
-  "Status": "Unselected source-only candidate; runtime validation pending",
+  "Status": "Unselected candidate; full offline backend build passed; runtime validation pending",
   "BaseRepository": "https://github.com/Skynizz/optiscaler-dlss5",
   "BaseCommit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
   "BaseSourceArchiveSha256": "1EAAD2223E679A935426E922F86A0341232AE96641579FEC4A5B34004A1CD507",
@@ -10,7 +10,7 @@
   "Patch": "fallback-limiter-only.patch",
   "PatchKind": "Focused delta against reconstructed 571C source; not a complete base-archive patch",
   "PatchSha256": "54A29549EE06AA2F4DCE548AA356BDB3E9331200E8646A7130F2A057233C2DEC",
-  "Dll": null,
+  "Dll": "OptiScaler.dll",
   "SelectedBackendChanged": false,
   "NativeReflexPathChanged": false,
   "DynamicMfgPolicy": "Configured maximum is a conservative cap policy, not actual displayed frame count",
@@ -28,7 +28,23 @@
     "Compiler": "MSVC v143, x64 Release, C++17, /W4 /WX",
     "Reconstruction": "Five source files from pinned archive, verified 571C hook, then candidate delta",
     "ProductionHelperSha256": "F7701869AB6F56C6D2052D97561D4D02BB5270580096F5295936016D4E84FF44",
-    "FullBackendBuilt": false,
     "RuntimeValidated": false
+  },
+  "BinaryIncludedInRepository": false,
+  "FullBackendValidation": {
+    "Result": "PASS",
+    "Record": "full-build-validation.json",
+    "RecordSha256": "EF1B97EDA7E502F03A01FAF8EA30F02B274059655B1614B307FAE98F5AAB6331",
+    "DllSha256": "D1B725510A86D2F9CEF11E4321F2719FAD5F364C76DAB898065CA066C3ED117B",
+    "DllBytes": 26470912,
+    "ExtensionExportsVerified": 4,
+    "Errors": 0,
+    "Warnings": [
+      "C4744",
+      "LNK4098"
+    ],
+    "RuntimeValidated": false,
+    "Deployed": false,
+    "BinaryPublished": false
   }
 }
