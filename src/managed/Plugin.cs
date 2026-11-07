@@ -36,6 +36,7 @@ public sealed class Plugin : BasePlugin
     private static ulong originalTaaHistoryCalls;
     private static bool renderingScopeActive;
     private static int renderingScopeFrame = -1;
+    private static int experimentalRenderScalePercent = 90;
     private static readonly bool ExperimentalSr90 =
 #if LE_EXPERIMENTAL_SR90
         true;
@@ -71,7 +72,11 @@ public sealed class Plugin : BasePlugin
         Log.LogInfo($"Last Epoch Graphics 0.1.0: Unity={Application.unityVersion}; API={SystemInfo.graphicsDeviceType}; GPU={SystemInfo.graphicsDeviceName}");
         if (ExperimentalSr90)
         {
-            Log.LogWarning("EXPERIMENTAL SR90: fixed 90% scene extent, NGX Quality hint, isolated full-resolution builtin postprocessing; runtime validation pending.");
+            var scaleSetting = Config.Bind("Upscaling", "RenderScalePercent", 90,
+                new ConfigDescription("Experimental build only. Scene resolution as a percentage of display width and height (50-100). 100 uses native DLAA. Restart after changing; the value is fixed for this process.",
+                    new AcceptableValueRange<int>(50, 100)));
+            experimentalRenderScalePercent = scaleSetting.Value;
+            Log.LogWarning($"EXPERIMENTAL SR90: RenderScalePercent={experimentalRenderScalePercent}; effective NGX quality={(experimentalRenderScalePercent == 100 ? 5 : 2)}; {(experimentalRenderScalePercent == 100 ? "native DLAA path" : "isolated full-resolution builtin postprocessing")}; runtime validation pending. Restart required for scale changes.");
             if (Environment.GetEnvironmentVariable("LE_EXPERIMENTAL_SR90") != "1")
             {
                 Status = "SR90 diagnostic inactive: process opt-in LE_EXPERIMENTAL_SR90=1 is required.";
@@ -870,6 +875,7 @@ public sealed class Plugin : BasePlugin
         internal readonly PostProcessLayer Layer;
         internal readonly bool Probe;
         internal readonly int SelectedQuality;
+        internal readonly int RenderScalePercent;
         private readonly DepthTextureMode oldDepth;
         private readonly PostProcessLayer.Antialiasing oldAA;
         private readonly bool oldFinalBlit, oldTransparentJitter, oldDynamicResolution, oldMsaa;
@@ -985,7 +991,8 @@ public sealed class Plugin : BasePlugin
         {
             Camera = camera; Layer = layer;
             Probe = ProbeOnly.Value;
-            SelectedQuality = ExperimentalSr90 ? 2 : Quality.Value;
+            RenderScalePercent = ExperimentalSr90 ? experimentalRenderScalePercent : 100;
+            SelectedQuality = ExperimentalSr90 ? (RenderScalePercent == 100 ? 5 : 2) : Quality.Value;
             oldDepth = camera.depthTextureMode; oldAA = layer.antialiasingMode;
             oldFinalBlit = layer.finalBlitToCameraTarget; oldTarget = camera.targetTexture;
             oldTransparentJitter = camera.useJitteredProjectionMatrixForTransparentRendering;
@@ -1027,7 +1034,7 @@ public sealed class Plugin : BasePlugin
             int w = Screen.width, h = Screen.height;
             if (w <= 0 || h <= 0) return;
             outputWidth = w; outputHeight = h;
-            float scale = Probe ? 1f : ExperimentalSr90 ? 0.9f : Scale(SelectedQuality);
+            float scale = Probe ? 1f : ExperimentalSr90 ? RenderScalePercent / 100f : Scale(SelectedQuality);
             if (scale < 0.999f)
             {
                 int rw = Math.Max(64, ((int)(w * scale) + 1) & ~1);
@@ -1038,7 +1045,7 @@ public sealed class Plugin : BasePlugin
                     SceneTarget = Make(rw, rh, Camera.allowHDR ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32, "LE scene", 24);
                     epoch++;
                     if (ExperimentalSr90)
-                        Instance.Log.LogWarning($"SR90 scene target allocated {rw}x{rh} -> {w}x{h}; scale=0.9; Quality hint={SelectedQuality}; full-resolution presentation remains unvalidated.");
+                        Instance.Log.LogWarning($"SR90 scene target allocated {rw}x{rh} -> {w}x{h}; RenderScalePercent={RenderScalePercent}; Quality hint={SelectedQuality}; full-resolution presentation remains unvalidated.");
                 }
                 Camera.targetTexture = SceneTarget;
                 targetApplied = true;
