@@ -116,6 +116,79 @@ int wmain(int argc, wchar_t** argv) {
     callback(1, queued);
     if (LE_Status() != -3) return 16;
     if (!LE_GetDiagnostics(&diagnostics, sizeof(diagnostics)) || diagnostics.evaluations || diagnostics.backendFlags) return 17;
+    // A 90% input uses fewer scene pixels while retaining the display-sized output.
+    // WARP validates only our resource contract and host-context restoration. It
+    // does not evaluate DLSS or establish that Unity presents scaled output correctly.
+    constexpr unsigned scaledWidth = 576, scaledHeight = 162;
+    constexpr unsigned displayWidth = 640, displayHeight = 180;
+    auto makeSizedTexture = [&](DXGI_FORMAT format, unsigned w, unsigned h,
+                                bool unorderedAccess, ComPtr<ID3D11Texture2D>& texture) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = w; desc.Height = h; desc.MipLevels = 1; desc.ArraySize = 1;
+        desc.Format = format; desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        if (unorderedAccess) desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+        return SUCCEEDED(device->CreateTexture2D(&desc, nullptr, &texture));
+    };
+    ComPtr<ID3D11Texture2D> scaledColor, scaledDepth, scaledMotion, displayOutput;
+    ComPtr<ID3D11Texture2D> displayDepth, displayMotion;
+    if (!makeSizedTexture(DXGI_FORMAT_R16G16B16A16_FLOAT, scaledWidth, scaledHeight, false, scaledColor) ||
+        !makeSizedTexture(DXGI_FORMAT_R32_FLOAT, scaledWidth, scaledHeight, false, scaledDepth) ||
+        !makeSizedTexture(DXGI_FORMAT_R16G16_FLOAT, scaledWidth, scaledHeight, false, scaledMotion) ||
+        !makeSizedTexture(DXGI_FORMAT_R16G16B16A16_FLOAT, displayWidth, displayHeight, true, displayOutput) ||
+        !makeSizedTexture(DXGI_FORMAT_R32_FLOAT, displayWidth, displayHeight, false, displayDepth) ||
+        !makeSizedTexture(DXGI_FORMAT_R16G16_FLOAT, displayWidth, displayHeight, false, displayMotion)) return 27;
+    Frame scaled = frame;
+    scaled.frameIndex = 600; scaled.mode = 0; scaled.verify = 0; scaled.quality = 2;
+    scaled.color = scaledColor.Get(); scaled.depth = scaledDepth.Get();
+    scaled.motion = scaledMotion.Get(); scaled.output = displayOutput.Get();
+    scaled.renderWidth = scaledWidth; scaled.renderHeight = scaledHeight;
+    scaled.outputWidth = displayWidth; scaled.outputHeight = displayHeight;
+    scaled.jitterX = 0.25f; scaled.jitterY = -0.375f;
+    scaled.motionScaleX = -float(scaledWidth); scaled.motionScaleY = -float(scaledHeight);
+    auto probeScaled = [&](const char* label, const Frame& probe, int expectedStatus) {
+        LE_RequestRetry();
+        Frame* token = LE_Queue(&probe);
+        if (!token) { printf("%s: valid queue metadata was rejected\n", label); return false; }
+        callback(1, token);
+        if (LE_Status() != expectedStatus) {
+            printf("%s: expected native status %d, received %d\n", label, expectedStatus, LE_Status());
+            return false;
+        }
+        UINT count = 1;
+        D3D11_VIEWPORT viewport{};
+        ComPtr<ID3D11RenderTargetView> renderTarget;
+        context->RSGetViewports(&count, &viewport);
+        context->OMGetRenderTargets(1, &renderTarget, nullptr);
+        const bool restored = count == 1 && renderTarget.Get() == expectedTarget.Get() &&
+            viewport.TopLeftX == expectedViewport.TopLeftX && viewport.TopLeftY == expectedViewport.TopLeftY &&
+            viewport.Width == expectedViewport.Width && viewport.Height == expectedViewport.Height &&
+            viewport.MinDepth == expectedViewport.MinDepth && viewport.MaxDepth == expectedViewport.MaxDepth;
+        if (!restored) printf("%s: host viewport/render target changed\n", label);
+        return restored;
+    };
+    if (!probeScaled("90% input with render-resolution guides", scaled, 1)) return 28;
+    Frame fullGuides = scaled;
+    fullGuides.frameIndex++;
+    fullGuides.depth = displayDepth.Get(); fullGuides.motion = displayMotion.Get();
+    fullGuides.motionScaleX = -float(displayWidth); fullGuides.motionScaleY = -float(displayHeight);
+    if (!probeScaled("90% input with display-resolution guides", fullGuides, 1)) return 29;
+    Frame wrongExtent = scaled;
+    wrongExtent.frameIndex += 2; wrongExtent.color = color.Get();
+    if (!probeScaled("Color extent differs from declared render extent", wrongExtent, -1)) return 30;
+    wrongExtent = scaled;
+    wrongExtent.frameIndex += 3; wrongExtent.output = output.Get();
+    if (!probeScaled("Output extent differs from declared display extent", wrongExtent, -1)) return 31;
+    wrongExtent = scaled;
+    wrongExtent.frameIndex += 4; wrongExtent.depth = depth.Get();
+    if (!probeScaled("Depth extent matches neither render nor display extent", wrongExtent, -1)) return 32;
+    wrongExtent = scaled;
+    wrongExtent.frameIndex += 5; wrongExtent.motion = motion.Get();
+    if (!probeScaled("Motion extent matches neither render nor display extent", wrongExtent, -1)) return 33;
+    scaled.frameIndex += 6;
+    if (!probeScaled("90% contract recovers after rejected extents", scaled, 1)) return 34;
+    if (!LE_GetDiagnostics(&diagnostics, sizeof(diagnostics)) || diagnostics.evaluations || diagnostics.backendFlags)
+        return 35;
     HudlessDiagnostics lateDiagnostics{};
     PresentationDiagnostics presentation{};
     if (LE_GetPresentationDiagnostics(&presentation, 1) != -1 ||
@@ -128,6 +201,6 @@ int wmain(int argc, wchar_t** argv) {
     callback(2, late); callback(2, late);
     LE_CancelQueuedFrame(reinterpret_cast<Frame*>(late));
     if (!LE_GetHudlessDiagnostics(&lateDiagnostics, sizeof(lateDiagnostics)) || lateDiagnostics.acceptedSubmissions) return 25;
-    printf("PASS: ABI120/64, invalid pointer rejection, WARP typed+typeless sampling/context restore, consume-once replay/cancellation, missing backend fails closed. No NVIDIA execution tested.\n");
+    printf("PASS: ABI120/64, invalid pointer rejection, WARP typed+typeless sampling/context restore, consume-once replay/cancellation, 90%% scaled-resource contracts and extent rejection, missing backend fails closed. No NVIDIA execution or Unity presentation tested.\n");
     return 0;
 }

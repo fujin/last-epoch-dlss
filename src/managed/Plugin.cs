@@ -36,14 +36,20 @@ public sealed class Plugin : BasePlugin
     private static ulong originalTaaHistoryCalls;
     private static bool renderingScopeActive;
     private static int renderingScopeFrame = -1;
+    private static readonly bool ExperimentalSr90 =
+#if LE_EXPERIMENTAL_SR90
+        true;
+#else
+        false;
+#endif
     private static readonly bool ExperimentalRenderScope =
-#if LE_EXPERIMENTAL_RENDER_SCOPE
+#if LE_EXPERIMENTAL_RENDER_SCOPE || LE_EXPERIMENTAL_SR90
         true;
 #else
         false;
 #endif
     private static readonly bool ExperimentalScaling =
-#if LE_EXPERIMENTAL_RENDER_SCOPE || LE_EXPERIMENTAL_SCALING || LE_DIAGNOSTIC_LOW_POSTPROCESS
+#if LE_EXPERIMENTAL_RENDER_SCOPE || LE_EXPERIMENTAL_SCALING || LE_DIAGNOSTIC_LOW_POSTPROCESS || LE_EXPERIMENTAL_SR90
         true;
 #else
         false;
@@ -63,6 +69,16 @@ public sealed class Plugin : BasePlugin
         DedicatedDisplayCamera = Config.Bind("Compatibility", "DedicatedDisplayCamera", true, "Present from an empty on-screen camera after the offscreen scene camera. Session checkbox permits comparison with the original camera event.");
         if (Quality.Value < 0 || Quality.Value > 5) Quality.Value = 5;
         Log.LogInfo($"Last Epoch Graphics 0.1.0: Unity={Application.unityVersion}; API={SystemInfo.graphicsDeviceType}; GPU={SystemInfo.graphicsDeviceName}");
+        if (ExperimentalSr90)
+        {
+            Log.LogWarning("EXPERIMENTAL SR90: fixed 90% scene extent, NGX Quality hint, isolated full-resolution builtin postprocessing; runtime validation pending.");
+            if (Environment.GetEnvironmentVariable("LE_EXPERIMENTAL_SR90") != "1")
+            {
+                Status = "SR90 diagnostic inactive: process opt-in LE_EXPERIMENTAL_SR90=1 is required.";
+                Log.LogWarning(Status + " No graphics hooks were installed.");
+                return;
+            }
+        }
         if (!ExperimentalScaling && Quality.Value != 5)
         {
             Status = "This build supports native-resolution DLAA; scaled SR remains experimental.";
@@ -99,6 +115,10 @@ public sealed class Plugin : BasePlugin
             Patch(typeof(PostProcessLayer), "OnPreCull", nameof(PreCull));
             Patch(typeof(PostProcessLayer), "Render", nameof(BeginPostProcessing));
             Patch(typeof(PostProcessLayer), "Render", nameof(EndPostProcessing), true);
+#if LE_EXPERIMENTAL_SR90
+            Patch(typeof(PostProcessLayer), "RenderBuiltins", nameof(BeginSr90Builtins));
+            Patch(typeof(PostProcessLayer), "RenderBuiltins", nameof(EndSr90Builtins), true);
+#endif
             Patch(typeof(TemporalAntialiasing), "Render", nameof(TemporalRender));
             Patch(typeof(TemporalAntialiasing), "CheckHistory", nameof(TraceOriginalTaaHistory));
             Patch(typeof(PostProcessLayer), "OnRenderImage", nameof(RenderImage));
@@ -272,10 +292,18 @@ public sealed class Plugin : BasePlugin
             s.ContextDescriptor = context.m_sourceDescriptor;
             s.ContextDestination = context.destination;
             s.ContextFlip = context.flip;
+#if LE_EXPERIMENTAL_SR90
+            // Keep the camera's own context, temporaries and attachments at scene
+            // resolution. A separate context owns only the builtin post stack.
+            ValidateSr90Stack(__instance, context, s);
+            s.RedirectedFrame = Time.frameCount;
+            return;
+#else
             context.command.Blit(context.source, s.Presented);
             context.destination = new RenderTargetIdentifier(s.Presented);
             context.flip = false;
             s.RedirectedFrame = Time.frameCount;
+#endif
         }
         catch (Exception e) { Fail(e); }
     }
@@ -356,7 +384,10 @@ public sealed class Plugin : BasePlugin
             queued = Native.Queue(ref frame);
             if (queued == IntPtr.Zero) throw new InvalidOperationException("Native input validation rejected the frame");
             s.TrackToken(queued);
-#if LE_DIAGNOSTIC_LOW_POSTPROCESS
+#if LE_EXPERIMENTAL_SR90
+            // Preserve the low-resolution temporary that the enclosing PPv2 Render
+            // owns. Only RenderBuiltins receives the independently sized context.
+#elif LE_DIAGNOSTIC_LOW_POSTPROCESS
             if (!s.Probe && s.SceneTarget != null && reported.Add("diagnostic-low-postprocess"))
                 Instance.Log.LogWarning("DIAGNOSTIC BUILD: full-resolution native SR is downcopied into the original low-resolution TAA target. PP context/temporary promotion is disabled; this is not validated full-resolution SR presentation.");
 #else
@@ -421,6 +452,119 @@ public sealed class Plugin : BasePlugin
         // sample the original camera's low-resolution depth and motion textures.
     }
 
+#if LE_EXPERIMENTAL_SR90
+    private sealed class Sr90BuiltinsState
+    {
+        internal readonly CameraState Camera;
+        internal readonly PostProcessRenderContext Original;
+        internal Sr90BuiltinsState(CameraState camera, PostProcessRenderContext original)
+        { Camera = camera; Original = original; }
+    }
+
+    private static void ValidateSr90Stack(PostProcessLayer layer, PostProcessRenderContext context, CameraState s)
+    {
+        if (context.width != s.SceneTarget!.width || context.height != s.SceneTarget.height ||
+            context.m_sourceDescriptor.width != context.width || context.m_sourceDescriptor.height != context.height ||
+            context.stereoActive || context.numberOfEyes != 1 || context.isSceneView || context.command == null ||
+            s.Camera.targetTexture != s.SceneTarget ||
+            s.Output.width != s.DisplayWidth || s.Output.height != s.DisplayHeight ||
+            s.Presented.width != s.DisplayWidth || s.Presented.height != s.DisplayHeight ||
+            s.Color.width != context.width || s.Color.height != context.height ||
+            s.Depth.width != context.width || s.Depth.height != context.height ||
+            s.Motion.width != context.width || s.Motion.height != context.height)
+            throw new InvalidOperationException("SR90 camera/context/input/output dimensions or non-stereo contract do not match");
+        if (layer.breakBeforeColorGrading || layer.antialiasingMode != PostProcessLayer.Antialiasing.TemporalAntialiasing ||
+            context.debugLayer.debugOverlay != UnityEngine.Rendering.PostProcessing.DebugOverlay.None ||
+            (HDROutputSettings.main != null && HDROutputSettings.main.active))
+            throw new InvalidOperationException("SR90 requires the normal TAA builtin stack, no PP debug overlay and SDR game output");
+        foreach (var point in new[] { PostProcessEvent.BeforeStack, PostProcessEvent.AfterStack })
+        {
+            if (!layer.HasActiveEffects(point, context)) continue;
+            var names = new List<string>();
+            foreach (var bundle in layer.sortedBundles[point])
+                if (bundle.bundle.settings.IsEnabledAndSupported(context)) names.Add(bundle.assemblyQualifiedName);
+            throw new InvalidOperationException($"SR90 does not yet own custom {point} effects: {string.Join(", ", names)}");
+        }
+    }
+
+    private static void BeginSr90Builtins(PostProcessLayer __instance, ref PostProcessRenderContext context,
+        bool isFinalPass, int releaseTargetAfterUse, int eye, out Sr90BuiltinsState? __state)
+    {
+        __state = null;
+        var s = active;
+        if (s == null || s.Layer != __instance || s.Probe || s.SceneTarget == null || !ShouldProcess(context.camera)) return;
+        try
+        {
+            ValidateSr90Stack(__instance, context, s);
+            if (!isFinalPass || eye != 0 || releaseTargetAfterUse < 0 ||
+                s.LastQueueFrame != Time.frameCount || s.Sr90BuiltinsFrame == Time.frameCount)
+                throw new InvalidOperationException("SR90 builtin boundary does not follow exactly one queued temporal resolve");
+            var full = s.Sr90PostContext;
+            full.Reset();
+            full.camera = context.camera;
+            full.command = context.command;
+            full.source = new RenderTargetIdentifier(s.Output);
+            full.destination = new RenderTargetIdentifier(s.Presented);
+            full.sourceFormat = RenderTextureFormat.ARGBHalf;
+            full.flip = false;
+            full.width = s.Output.width; full.height = s.Output.height;
+            full.screenWidth = full.width; full.screenHeight = full.height;
+            full.resources = context.resources;
+            full.propertySheets = context.propertySheets;
+            full.debugLayer = context.debugLayer;
+            full.isSceneView = false;
+            full.antialiasing = context.antialiasing;
+            full.temporalAntialiasing = context.temporalAntialiasing;
+            full.logHistogram = context.logHistogram;
+            full.physicalCamera = context.physicalCamera;
+            var descriptor = s.Output.descriptor;
+            descriptor.depthBufferBits = 0;
+            descriptor.msaaSamples = 1;
+            descriptor.enableRandomWrite = false;
+            descriptor.useDynamicScale = false;
+            full.m_sourceDescriptor = descriptor;
+            // Explicitly detach the scene's depth surface before the full-size
+            // color-only stack. Builtin effects still sample normalized scene
+            // depth/motion textures; they never bind them as this target's depth.
+            full.command.SetRenderTarget(new RenderTargetIdentifier(s.Presented));
+            full.command.SetViewport(new Rect(0, 0, full.width, full.height));
+            __state = new Sr90BuiltinsState(s, context);
+            context = full;
+        }
+        catch (Exception e) { Fail(e); }
+    }
+
+    private static void EndSr90Builtins(ref PostProcessRenderContext context, Sr90BuiltinsState? __state)
+    {
+        if (__state == null) return;
+        var s = __state.Camera;
+        var original = __state.Original;
+        try
+        {
+            // The stock method alone releases its low-resolution taaTarget ID.
+            // Its returned target stays untouched. The enclosing Render keeps
+            // the original context and receives a valid low-size spatial copy.
+            original.command.Blit(s.Presented, original.destination);
+            // Match the stock method's caller-visible source and effect state;
+            // its old TAA source ID has already been released by the stock call.
+            original.source = original.destination;
+            original.uberSheet = context.uberSheet;
+            original.autoExposureTexture = context.autoExposureTexture;
+            original.autoExposure = context.autoExposure;
+            original.logLut = context.logLut;
+            original.bloomBufferNameID = context.bloomBufferNameID;
+            var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
+            original.command.SetRenderTarget(cameraTarget, cameraTarget);
+            original.command.SetViewport(new Rect(0, 0, original.width, original.height));
+            s.Sr90BuiltinsFrame = Time.frameCount;
+            if (queuedFrames == 1 || queuedFrames % 300 == 0)
+                Instance.Log.LogInfo($"SR90 builtin boundary frame={Time.frameCount}: camera={original.width}x{original.height}, ownedPost={s.Presented.width}x{s.Presented.height}; original context/temporary sizes retained; final image boundary still required.");
+        }
+        catch (Exception e) { Fail(e); }
+        finally { context = original; }
+    }
+#endif
+
     private static bool RenderImage(PostProcessLayer __instance, RenderTexture src, RenderTexture dst)
     {
         renderImageCalls++;
@@ -430,6 +574,39 @@ public sealed class Plugin : BasePlugin
         if (s == null || s.Layer != __instance || s.PreparedFrame != Time.frameCount || src == null) return true;
         bool scaledScene = s.SceneTarget != null;
         bool finalBoundary = scaledScene ? dst == s.SceneTarget : dst == null;
+#if LE_EXPERIMENTAL_SR90
+        if (scaledScene)
+        {
+            try
+            {
+                bool validOutput = s.Output.width == Screen.width && s.Output.height == Screen.height &&
+                    s.Presented.width == Screen.width && s.Presented.height == Screen.height;
+                if (!finalBoundary || s.Sr90BuiltinsFrame != Time.frameCount || faulted || !validOutput)
+                {
+                    // Unity may retain an intermediate image-effect target for the
+                    // first camera frame. Present the completed low-size chain for
+                    // at most three startup frames; never label it SR or submit it
+                    // as full-size HUDless evidence. Later boundary changes stop.
+                    s.RecordDisplay(s.SceneTarget!);
+                    if (!faulted)
+                    {
+                        if (s.Sr90BuiltinsFrame != Time.frameCount || !validOutput)
+                            Fail(new InvalidOperationException("SR90 builtin result or display extent is missing; preserving the original image-effect chain."));
+                        else if (s.Sr90FinalBoundarySeen || ++s.Sr90BoundaryWarmupFrames > 3)
+                            Fail(new InvalidOperationException($"SR90 final image boundary rejected: source={DescribeTexture(src)} destination={DescribeTexture(dst)}; preserving the original image-effect chain."));
+                        else
+                            Instance.Log.LogWarning($"SR90 startup boundary {s.Sr90BoundaryWarmupFrames}/3: destination={DescribeTexture(dst)}; spatial fallback only, no full-resolution or HUDless submission.");
+                    }
+                    return true;
+                }
+                if (!s.Sr90FinalBoundarySeen || queuedFrames % 300 == 0)
+                    Instance.Log.LogInfo($"SR90 final image boundary frame={Time.frameCount}: scene={s.SceneTarget!.width}x{s.SceneTarget.height}, display={s.Presented.width}x{s.Presented.height}; full-size display commands eligible, visual validation still required.");
+                s.Sr90FinalBoundarySeen = true;
+                s.Sr90BoundaryWarmupFrames = 0;
+            }
+            catch (Exception e) { Fail(e); return true; }
+        }
+#endif
         bool tryHudless = scaledScene && LateHudless.Value && !s.Probe && !faulted && s.LastQueueFrame == Time.frameCount &&
             finalBoundary && Native.HudlessProviderVersion() == 1;
         // Preserve this frame's spatial fallback even if a hook already failed.
@@ -718,6 +895,11 @@ public sealed class Plugin : BasePlugin
         internal IntPtr ColorPtr, DepthPtr, MotionPtr, OutputPtr;
         internal int PreparedFrame = -1, TemporalFrame = -1, RedirectedFrame = -1, LastQueueFrame = -1;
         internal int ContextFrame = -1, ContextWidth, ContextHeight, ContextScreenWidth, ContextScreenHeight;
+#if LE_EXPERIMENTAL_SR90
+        internal int Sr90BuiltinsFrame = -1, Sr90BoundaryWarmupFrames;
+        internal bool Sr90FinalBoundarySeen;
+        internal readonly PostProcessRenderContext Sr90PostContext = new();
+#endif
         internal RenderTextureDescriptor ContextDescriptor;
         internal RenderTargetIdentifier ContextDestination;
         internal bool ContextFlip;
@@ -803,7 +985,7 @@ public sealed class Plugin : BasePlugin
         {
             Camera = camera; Layer = layer;
             Probe = ProbeOnly.Value;
-            SelectedQuality = Quality.Value;
+            SelectedQuality = ExperimentalSr90 ? 2 : Quality.Value;
             oldDepth = camera.depthTextureMode; oldAA = layer.antialiasingMode;
             oldFinalBlit = layer.finalBlitToCameraTarget; oldTarget = camera.targetTexture;
             oldTransparentJitter = camera.useJitteredProjectionMatrixForTransparentRendering;
@@ -828,6 +1010,9 @@ public sealed class Plugin : BasePlugin
             FinalCommands.Clear();
             hudlessCommands.Clear();
             HudlessCaptureFrame = -1;
+#if LE_EXPERIMENTAL_SR90
+            Sr90BuiltinsFrame = -1;
+#endif
             UpdateDisplayOwner();
             SuppressCtaa();
             if (oldTarget != null) throw new InvalidOperationException("Scene camera already has an offscreen target; refusing to replace it");
@@ -842,7 +1027,7 @@ public sealed class Plugin : BasePlugin
             int w = Screen.width, h = Screen.height;
             if (w <= 0 || h <= 0) return;
             outputWidth = w; outputHeight = h;
-            float scale = Probe ? 1f : Scale(SelectedQuality);
+            float scale = Probe ? 1f : ExperimentalSr90 ? 0.9f : Scale(SelectedQuality);
             if (scale < 0.999f)
             {
                 int rw = Math.Max(64, ((int)(w * scale) + 1) & ~1);
@@ -852,6 +1037,8 @@ public sealed class Plugin : BasePlugin
                     Retire(SceneTarget);
                     SceneTarget = Make(rw, rh, Camera.allowHDR ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32, "LE scene", 24);
                     epoch++;
+                    if (ExperimentalSr90)
+                        Instance.Log.LogWarning($"SR90 scene target allocated {rw}x{rh} -> {w}x{h}; scale=0.9; Quality hint={SelectedQuality}; full-resolution presentation remains unvalidated.");
                 }
                 Camera.targetTexture = SceneTarget;
                 targetApplied = true;

@@ -21,6 +21,8 @@ For development, start with the [fresh-clone prerequisites](REPOSITORY.txt), [pi
 
 Use the [read-only preflight](docs/preflight.txt) to inspect source prerequisites and a staged candidate before installation. It reports file conflicts and unverified requirements without changing the game.
 
+For isolated SR development, `scripts/Build-Experimental.ps1 -Variant SR90` builds a guarded 90% candidate (4608×1296 input at 5120×1440 output) and runs the native software resource tests. It writes to an ignored build directory and does not stage, install or launch anything. Activation requires that experimental DLL, `ProbeOnly=false` and the process environment variable `LE_EXPERIMENTAL_SR90=1`; the quality hint is fixed to SR Quality. `-Variant Baseline -ManagedOnly` compiles the normal guarded adapter for comparison. The SR candidate still needs in-game image/HUD/input validation before any performance or release claim.
+
 Once reviewed binaries and dependencies are staged, the tested NR-off profile is:
 
 ```powershell
