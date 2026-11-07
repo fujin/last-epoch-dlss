@@ -1,0 +1,164 @@
+BOUNDED OFFLINE RUNTIME VALIDATION - 7 NOVEMBER 2026
+=================================================
+Status: bounded baseline and candidate smoke tests complete; original files restored.
+This report is not a release approval or a fallback-limiter runtime validation.
+
+ENVIRONMENT AND ARTIFACTS
+
+Windows, RTX 5080, primary physical display, native 5120x1440 borderless.
+Last Epoch 1.5.3, installed Steam build 26087601, Unity 6000.4.8f1.
+D3D11 game with the backend's D3D12 interop path. Offline DLSSProbe character,
+The Old Road. No online play or main-character testing was performed.
+The driver version was not reverified in this session.
+
+SHA256 identities:
+Managed adapter:
+E8412D5E3D47932641884A2888C00B989C99157CCEC051BACB396CA5AE046C5F
+Native bridge:
+257A6F321804B1BB3A82E3E10407888E125C9DBE24243D5C6E39FE8212E80BB4
+Stable baseline backend (571C):
+571C93E38E0A81ACC0C5B0BB43C4DB1801B1484CD2E4F84826B2AAF33DAA9BE6
+Temporary full-build candidate (D1B):
+D1B725510A86D2F9CEF11E4321F2719FAD5F364C76DAB898065CA066C3ED117B
+
+BASELINE PROCEDURE AND RESULTS
+
+571C launched at 08:49:43 UTC. The root tester observed normal game exit at
+approximately 08:57:19 UTC; this is UI evidence rather than a log-only inference.
+The game entered The Old Road at approximately 08:53:19 UTC. Native DLAA,
+4x total frame generation, output cap 223.900009, and the existing NR profile
+were used. The NR profile was pre-SR, reduced model, WorkingScale=0.5 and
+edit caching enabled. NR off was selected through the live comparison control;
+the existing optimized NR profile was subsequently restored.
+
+The root tester observed the backend menu report Reflex as the cap method. F11 opened the
+backend menu; its Close button worked. F11 also toggled the game's FPS counter.
+This is bounded hotkey evidence, not resolution of diagnostic input issue #6.
+
+Stationary samples from the adapter's independent presentation telemetry:
+
+Mode           Sample boundaries       Intervals  Render time  Present time  Render FPS  DXGI calls/s
+NR off         client 17553..19953       9          48.235 s     48.238 s      55.976      223.869
+NR restored    client 21453..24453       11         62.795 s     62.802 s      52.552      210.200
+
+Rendered FPS is total sampled rendered frames divided by the sum of the logged
+render-sample durations (Render time). DXGI calls/s is total Present calls divided by the sum
+of the independent presentation-sample durations (Present time). Those windows are related but
+not identical; the two measurements are intentionally kept separate.
+
+The NR-off samples ranged from 55.97 to 55.98 rendered FPS, with 3.993 to 4.003
+native calls per client frame. The restored NR-on samples ranged from 52.27 to
+52.76 rendered FPS, with 3.997 to 4.003 calls per client frame. This stationary,
+capped scene is not a combat benchmark or an uncapped NR-cost measurement.
+
+Whole paired Player/backend logs passed Test-RenderLog with zero tracked
+render-target errors, color/depth mismatches, Unity device errors or backend
+device errors. The backend log contained no [E] entries. The Player log was not
+entirely error-free: it contained two 'Actor is null' entries, one uninitialized
+UserIdentity entry, one null EncounterPlacementData entry, and repeated
+'No Alignment' entries during shutdown. Their relationship to the mod is
+unestablished. A zero result from the targeted rendering validator must not be
+reported as absence of all application errors.
+
+CANDIDATE SMOKE TEST - BOUNDED PASS
+
+D1B was temporarily deployed through a version.dll-only swap with stable-DLL,
+journal and configuration backups. Managed/native adapter identities above
+were unchanged. It launched at 08:58:45 UTC with a temporary 120 output cap,
+4x total FG and the same NR 0.5 profile. ForceDMFG and OverrideForceDMFG were
+set false for the bounded fixed-multiplier experiment.
+
+The root tester selected 5x at 09:03:12 UTC and closed the menu at 09:03:21;
+selected 2x at 09:04:36 and closed the menu at approximately 09:04:48;
+selected NR off at 09:05:59 and closed the menu at 09:06:10. Optimized NR was
+restored at 09:07:01, with the menu closed at approximately 09:07:13.
+
+Candidate stationary cap samples, excluding transition intervals:
+
+Profile       Sample boundaries       Intervals  Render time  Present time  Render FPS  DXGI calls/s
+4x, NR on     client 5161..7561         9          90.000 s     89.997 s      30.000      120.004
+5x, NR on     client 10261..10561       2          24.999 s     24.998 s      24.001      120.010
+2x, NR on     client 13261..13561       2          10.000 s     10.000 s      60.000      120.000
+2x, NR off    client 17761..18061       2          10.000 s      9.999 s      60.000      120.012
+
+Calls per client frame were exactly 4.000, 5.000, 2.000 and 2.000 respectively
+in these samples. These are calculations from rounded telemetry intervals.
+The final 2x NR-off sample was deliberately selected before NR restoration;
+later telemetry that may overlap the restoration is excluded.
+
+This verifies bounded native-Reflex cap/multiplier behavior on this installation.
+Both 2x samples are cap-limited, so they do not measure the uncapped NR cost.
+Comparing different multipliers also changes FG work and cannot isolate NR cost.
+These candidate numbers do not establish a speedup over 571C: the output caps
+and fixed-multiplier configuration differ between baseline and candidate runs.
+
+The root tester observed repeated menu Close actions working and the HUD fitting
+the display. F11 continued to toggle the game's own FPS counter as well. Two
+short point-movement commands at 09:07:23 and 09:07:43 visibly moved the character
+and camera with the HUD remaining in place. No combat or additional scene
+transition was tested. These are bounded UI observations, not a comprehensive
+motion-artifact or input-latency assessment.
+
+The root tester observed normal Exit Game around 09:08:41 UTC and confirmed the
+stopped-game assertion at approximately 09:09 UTC. The candidate run lasted
+approximately ten minutes, including startup and menus; this is not an extended
+stability qualification.
+
+Whole archived paired Player/backend logs passed Test-RenderLog -RequireClean:
+zero tracked render-target errors, color/depth mismatches, Unity device errors
+or backend device errors. The backend had zero [E] entries. The Player log had
+14 game-error entries: 'Actor is null' twice, uninitialized UserIdentity once,
+null EncounterPlacementData once, and 'No Alignment' ten times during shutdown.
+These categories were also present in the baseline. That correspondence does
+not establish their cause, and neither log should be described as entirely
+error-free.
+
+Result: bounded compatibility/cap smoke passed on the native-Reflex path. The
+fallback limiter change was not exercised. No candidate selection, staged-payload
+promotion or downloadable release is established by temporary deployment.
+
+FALLBACK-LIMITER LIMITATION
+
+This NVIDIA DLSSG path uses native Reflex. Source review found that DLSSG sets
+low-latency Reflex mode and the FG hook skips the fallback sleep when Reflex is
+handling the limit. No supported configuration switch was identified that
+reliably exercises the changed fallback limiter while retaining this path.
+
+A successful D1B smoke test can establish bounded compatibility of the rebuilt
+backend with this installation. It cannot establish that the fallback multiplier
+fix executed, improved pacing or reduced NR latency. Direct runtime proof still
+requires explicit diagnostic instrumentation or a naturally eligible path.
+The candidate's existing pure-policy and full-build checks remain separate.
+
+RESTORATION - VERIFIED
+
+The private restoration receipt records completion at 09:09:57 UTC with the
+game stopped. The installed backend SHA256 matches the original 571C identity.
+OptiScaler.ini, local.lastepoch.graphics.cfg and le_graphicsmanager.ini each
+match their exact pre-session backup hashes. This restores the user's existing
+F11 binding, NR profile, frame-generation settings, cap and graphics preferences.
+The deployment journal retains the test/restore audit history; it was not rolled
+back byte-for-byte to its old contents.
+
+No post-restoration game launch was performed. The final check establishes
+stopped-game file/configuration recovery, not an additional restored-launch
+smoke pass. The original 571C baseline was validated before the candidate swap.
+The candidate remains unselected and the staged release artifacts were unchanged.
+
+EVIDENCE AND CLAIM LIMITS
+
+Raw paired logs and local backup receipts are retained privately under the
+runtime-session-20261107-084845 diagnostics session. They are not release assets.
+Only this curated report is suitable for source control; do not publish account
+information, machine paths, screenshots, saves or raw logs with it.
+
+DXGI Present-call/sequence counters do not prove unique generated images,
+physical panel scanout cadence, motion quality or input-to-display latency.
+This test does not certify sustained 240 FPS, SR Quality/Balanced/Performance,
+other displays/resolutions, native HDR game output, online compatibility,
+long-session stability, other GPUs/drivers or clean-machine installation.
+
+The public alpha gates in docs/public-release-plan.txt remain open: dependency
+distribution review, minimal payload packaging, fresh build/install/rollback,
+usable input handling and a broader candidate runtime matrix. This bounded
+session supplements those gates; it does not replace them.

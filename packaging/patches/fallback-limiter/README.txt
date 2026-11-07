@@ -4,7 +4,8 @@ UNSELECTED FALLBACK-LIMITER SOURCE CANDIDATE
 Tracks https://github.com/fujin/last-epoch-dlss/issues/2. This is a focused review
 and test delta against the selected 571C menu-fence source, not a complete patch
 against the original upstream archive and not a replacement for 571C.
-No backend DLL is included in this repository, staged, installed, or selected.
+No backend DLL is included in this repository. The candidate has not been
+promoted to the selected runtime.
 The optional full-build recipe compiles a local candidate into an ignored tree.
 
 PROBLEM AND CHANGE
@@ -77,8 +78,47 @@ CRT libraries). All four extension exports were present. Candidate DLL:
 full-build-validation.json records the ordered input hashes, 19 changed source
 file identities, two generated build-identity headers, toolchain, artifact and
 static export evidence. Timestamps/toolchain differences can change a rebuild's
-DLL hash. This is compile proof only: pacing, latency, dynamic MFG and in-game
+DLL hash. The build alone establishes compile/export proof. See the bounded
+runtime result below; fallback pacing, input latency, dynamic MFG and broader
 compatibility remain unvalidated. The selected 571C backend remains unchanged.
+
+RUNTIME TEST SCOPE AND FUTURE DIAGNOSTIC
+
+2026-11-07: bounded compatibility testing completed at native 5120x1440:
+fixed 2x/4x/5x FG with output cap 120 and NR at WorkingScale=0.5, plus 2x NR off.
+These measurements used native Reflex and did not exercise the changed fallback
+limiter. Stable 571C and the exact original configurations were restored at
+09:09:57 UTC. The candidate remains unselected and has not been promoted.
+Evidence: ../../../docs/validation/runtime-20261107.txt
+The native NVIDIA DLSSG path enables Reflex eLowLatency (DLSSG_Dx12.cpp:300).
+Reflex_Hooks.cpp:606 sets reflexLimitsFps from that mode, bypassing the fallback
+at FG_Hooks.cpp:1357. The force-disable override is commented out; neither
+[fakenvapi] ForceReflex=1 nor UseGamesReflexMarkers=false proves fallback use.
+No supported configuration-only forcing path was found. A normal DLSSG run of
+D1B725 validates compatibility only, not this changed limiter or lower latency.
+
+Future diagnostic work, not implemented in the production candidate:
+- Require both a separate diagnostic build define and a process-only opt-in.
+  Preserve Reflex mode, markers and Sleep. In Reflex_Hooks.cpp, force the native
+  cap to zero in setFPSLimit and hkNvAPI_D3D_SetSleepMode, check NVAPI results,
+  and make update select fallback for the intended NVIDIA/D3D DLSSG test path.
+  Clearing reflexLimitsFps alone could leave the old driver cap active.
+- Count actual FrameLimit::sleep calls, effective multiplier/cap/interval,
+  requested and elapsed wait time, and errors. Log each settings change and a
+  summary every 300 calls; prove zero native cap before interpreting results.
+- Compare 571C plus this diagnostic with D1B725 plus the identical diagnostic.
+  Use ForceDMFG=false, InterpolationCount=1/3/4 (2x/4x/5x), output cap 80, NR off,
+  then NR at WorkingScale=0.5. Expected old/new real-FPS ceilings are respectively
+  40/40, 40/20, 40/16; output-call ceilings are 80/80, 160/80, 200/80. These are
+  predictions subject to GPU headroom and other pacing, not measured results.
+  Keep the scene/settings fixed and collect two complete 300-client intervals
+  after each transition, matching counter epochs and checking rendering errors.
+- Give the diagnostic a distinct artifact/export marker and provenance; reject
+  it in release packaging and keep selected pins unchanged. The normal build
+  must omit the define, so an environment variable alone cannot enable bypass.
+
+Presentation calls do not measure physical scanouts or input-to-display latency.
+This test plan establishes cap semantics; it makes no lower-latency claim.
 
 PROVENANCE AND FUTURE USE
 

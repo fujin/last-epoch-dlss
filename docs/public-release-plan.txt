@@ -1,6 +1,6 @@
 PUBLIC ALPHA RELEASE PLAN
 =========================
-Drafted 31 October 2026; updated 4 November 2026. This is a readiness plan.
+Drafted 31 October 2026; updated 7 November 2026. This is a readiness plan.
 The source repository is public; a downloadable alpha still requires validation.
 
 FIRST RELEASE SCOPE
@@ -105,9 +105,10 @@ RELEASE GATES
     The Windows native build, WARP contract and 19 install/restore fixtures passed
     on GitHub Actions for commit 48bf2fa. The read-only preflight adds 43 local
     fixtures and is wired into the same workflow. The limiter candidate has 38
-    policy checks and a clean full-source backend compile/export check; it is
-    still unselected and unvalidated in the game. CI cannot certify rendering,
-    actual frame pacing or end-to-end latency.
+    policy checks and a clean full-source backend compile/export check. It remains
+    unselected after bounded compatibility testing on 7 November: native Reflex
+    bypassed the changed fallback limiter, so that fix still lacks runtime proof.
+    CI cannot certify rendering, actual frame pacing or end-to-end latency.
 
 [ ] Complete a documented runtime matrix for the release candidate.
     Include native 1080p/1440p and the tested ultrawide mode where available;
@@ -117,11 +118,15 @@ RELEASE GATES
     handling and useful fallback for unsupported formats. Reproduce on at least
     one additional machine before describing the binary as generally usable.
     Keep unsupported resolutions/modes explicitly outside the tested claim.
+    The 7 November report adds bounded 5120x1440 DLAA checks: fixed 2x/4x/5x
+    at output cap 120, NR on/off, menu interactions, short movement and normal
+    exit. It does not establish fallback-limiter execution or reduced latency.
 
 [ ] Fix or remove interactive diagnostic UI from the end-user experience.
     F10 debug-panel clicks must not affect gameplay. Verify the backend menu's
     remapped hotkey and focus handling. Document F11 or another accessible key;
-    existing rebinding support does not need to be reinvented.
+    existing rebinding support does not need to be reinvented. On 7 November,
+    F11 opened the backend menu but also toggled the game FPS counter.
 
 [ ] Prepare release notes, support intake and privacy-aware diagnostics.
     Lead with supported features and explicit limitations, installation/removal,
@@ -155,6 +160,7 @@ Dependency identities/licenses: packaging/backend-plan.json
 Original prerequisites: packaging/build-prerequisites.json
 Backend source reconstruction: packaging/patches/README.txt
 Recorded validation: docs/validation and packaging/source-candidates.json
+Latest bounded runtime report: docs/validation/runtime-20261107.txt
 Official NVIDIA RTX SDK license (review exact shipped version as well):
 https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt
 Official Streamline license for the pinned version:

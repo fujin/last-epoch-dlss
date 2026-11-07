@@ -13,7 +13,7 @@ This is a **source-only prototype**: build/deployment scripts, validation summar
 
 **Reduced-resolution DLSS Super Resolution is unsupported.** Quality, Balanced and Performance produced incorrect output and are guarded in the normal build. The 240 FPS goal was not reached. DXGI call counts do not independently establish unique generated images or physical display cadence; frame generation does not multiply game simulation or input responsiveness.
 
-Testing used offline play, an RTX 5080, Last Epoch 1.5.3 / Steam build 26087601, Unity 6000.4.8f1 and BepInEx 6.0.0-be.791. A corrected backend passed a bounded 23-minute menu/control test and a final smoke test. Broader scene/stability coverage, online compatibility and other hardware remain unverified. See the [runtime audit](docs/dll-compatibility-audit.txt) and [exact artifact identities](packaging/source-candidates.json).
+Testing used offline play, an RTX 5080, Last Epoch 1.5.3 / Steam build 26087601, Unity 6000.4.8f1 and BepInEx 6.0.0-be.791. A corrected backend passed a bounded 23-minute menu/control test and a final smoke test. Broader scene/stability coverage, online compatibility and other hardware remain unverified. See the [runtime audit](docs/dll-compatibility-audit.txt), [7 November compatibility test](docs/validation/runtime-20261107.txt) and [exact artifact identities](packaging/source-candidates.json).
 
 The managed BepInEx plugin hooks Unity PPv2's temporal resolve and supplies scene color, depth, motion and jitter to a native D3D11 bridge. The modified OptiScaler backend connects those resources to NVIDIA features through D3D11/D3D12 interop. A separate postprocessed scene capture runs before later UI rendering. Lossless Scaling is not required.
 
